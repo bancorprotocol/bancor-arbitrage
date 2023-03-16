@@ -1,0 +1,14 @@
+.DS_Store
+.vscode/
+*/**/.DS_Store
+
+node_modules
+.env
+
+
+dist
+out
+cache
+cache_forge
+artifacts
+typechain-types

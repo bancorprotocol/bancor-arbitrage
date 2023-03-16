@@ -1,0 +1,53 @@
+{
+  "name": "@bancor/bancor-arbitrage",
+  "version": "1.0.0",
+  "description": "The Bancor Arbitrage Solidity contracts",
+  "main": "index.js",
+  "author": "Bancor Team",
+  "scripts": {
+    "build": "hardhat compile",
+    "rebuild": "yarn clean && yarn build",
+    "test": "forge test",
+    "test:coverage": "forge coverage",
+    "gas-report": "forge test --gas-report",
+    "lint": "yarn lint:sol && yarn lint:ts",
+    "lint:sol": "solhint --max-warnings 0 contracts/**/*.sol",
+    "lint:ts": "yarn eslint",
+    "format": "prettier --check --write test/**/*.sol contracts/**/*.sol --config .prettierrc",
+    "clean": "rm -rf artifacts cache coverage typechain-types"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bancorprotocol/bancor-arbitrage.git"
+  },
+  "keywords": [],
+  "license": "SEE LICENSE IN LICENSE",
+  "bugs": {
+    "url": "https://github.com/bancorprotocol/bancor-arbitrage/issues"
+  },
+  "homepage": "https://github.com/bancorprotocol/bancor-arbitrage#readme",
+  "dependencies": {
+    "hardhat": "^2.13.0"
+  },
+  "devDependencies": {
+    "@bancor/token-governance": "^0.1.8",
+    "@ethersproject/abi": "^5.4.7",
+    "@ethersproject/providers": "^5.4.7",
+    "@openzeppelin/contracts": "^4.8.2",
+    "@openzeppelin/contracts-upgradeable": "^4.8.2",
+    "@typechain/ethers-v5": "^10.2.0",
+    "@typechain/hardhat": "^6.1.5",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "@uniswap/v3-periphery": "^1.4.3",
+    "chai": "^4.2.0",
+    "eslint": "^8.36.0",
+    "ethers": "^5.4.7",
+    "prettier": "^2.8.4",
+    "prettier-plugin-solidity": "^1.1.3",
+    "solhint": "^3.4.1",
+    "solidity-coverage": "^0.8.2",
+    "ts-node": "^10.9.1",
+    "typechain": "^8.1.1",
+    "typescript": "^4.9.5"
+  }
+}
