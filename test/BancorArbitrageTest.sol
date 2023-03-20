@@ -17,7 +17,7 @@ import { Utilities } from "./Utilities.t.sol";
 import { BancorArbitrage } from "../contracts/arbitrage/BancorArbitrage.sol";
 import { IBancorNetworkV2 } from "../contracts/exchanges/interfaces/IBancorNetworkV2.sol";
 import { MockExchanges } from "../contracts/helpers/MockExchanges.sol";
-import { TestGovernedToken } from "../contracts/helpers/TestGovernedToken.sol";
+import { TestBNT } from "../contracts/helpers/TestBNT.sol";
 import { TestWETH } from "../contracts/helpers/TestWETH.sol";
 import { IBancorNetwork, IFlashLoanRecipient } from "../contracts/exchanges/interfaces/IBancorNetwork.sol";
 import { PPM_RESOLUTION } from "../contracts/utility/Constants.sol";
@@ -28,7 +28,7 @@ contract BancorArbitrageTest is Test {
 
     Utilities private utils;
     BancorArbitrage private bancorArbitrage;
-    TestGovernedToken private bnt;
+    TestBNT private bnt;
     TestWETH private weth;
     TestERC20Token private baseToken;
     TestERC20Token private arbToken1;
@@ -109,7 +109,7 @@ contract BancorArbitrageTest is Test {
         // deploy proxy admin
         proxyAdmin = new ProxyAdmin();
         // deploy BNT
-        bnt = new TestGovernedToken("Bancor Network Token", "BNT", 1_000_000_000 ether);
+        bnt = new TestBNT("Bancor Network Token", "BNT", 1_000_000_000 ether);
         // deploy WETH
         weth = new TestWETH();
         // deploy MockExchanges
