@@ -15,6 +15,7 @@ contract TestBNT is IMintableToken, TestERC20Token {
     ) TestERC20Token(name, symbol, totalSupply) {
         _mint(msg.sender, totalSupply);
     }
+
     // triggered when the total supply is decreased
     event Destruction(uint256 _amount);
 
