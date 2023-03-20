@@ -4,18 +4,8 @@ pragma solidity 0.8.19;
 import { PPM_RESOLUTION } from "./Constants.sol";
 
 error AccessDenied();
-error AlreadyExists();
-error DoesNotExist();
 error InvalidAddress();
-error InvalidExternalAddress();
 error InvalidFee();
-error InvalidPool();
-error InvalidPoolCollection();
-error InvalidStakedBalance();
-error InvalidToken();
-error InvalidParam();
-error NotEmpty();
-error NotPayable();
 error ZeroValue();
 
 /**
@@ -60,20 +50,6 @@ abstract contract Utils {
     function _validAddress(address addr) internal pure {
         if (addr == address(0)) {
             revert InvalidAddress();
-        }
-    }
-
-    // validates an external address - currently only checks that it isn't null or this
-    modifier validExternalAddress(address addr) {
-        _validExternalAddress(addr);
-
-        _;
-    }
-
-    // error message binary size optimization
-    function _validExternalAddress(address addr) internal view {
-        if (addr == address(0) || addr == address(this)) {
-            revert InvalidExternalAddress();
         }
     }
 
