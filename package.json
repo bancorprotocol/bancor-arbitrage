@@ -33,7 +33,7 @@
     "url": "git+https://github.com/bancorprotocol/bancor-arbitrage.git"
   },
   "keywords": [],
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/bancorprotocol/bancor-arbitrage/issues"
   },
