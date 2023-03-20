@@ -14,7 +14,7 @@ describeDeployment(__filename, () => {
 
     it('should upgrade correctly', async () => {
         expect(await proxyAdmin.getProxyAdmin(bancorArbitrage.address)).to.equal(proxyAdmin.address);
-        expect(await bancorArbitrage.version()).to.equal(3);
+        expect(await bancorArbitrage.version()).to.equal(2);
 
         const arbRewards = await bancorArbitrage.rewards();
         expect(arbRewards.percentagePPM).to.equal(toPPM(10));
