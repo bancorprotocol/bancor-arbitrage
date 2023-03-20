@@ -127,8 +127,8 @@ export const DeployedContracts = {
 export const isTenderlyFork = () => getNetworkName() === DeploymentNetwork.Tenderly;
 export const isMainnetFork = () => isTenderlyFork();
 export const isMainnet = () => getNetworkName() === DeploymentNetwork.Mainnet || isMainnetFork();
-export const isRinkeby = () => getNetworkName() === DeploymentNetwork.Rinkeby;
-export const isLive = () => (isMainnet() && !isMainnetFork()) || isRinkeby();
+export const isSepolia = () => getNetworkName() === DeploymentNetwork.Sepolia;
+export const isLive = () => (isMainnet() && !isMainnetFork()) || isSepolia();
 
 const TEST_MINIMUM_BALANCE = toWei(10);
 const TEST_FUNDING = toWei(10);

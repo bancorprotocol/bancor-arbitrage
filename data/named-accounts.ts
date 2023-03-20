@@ -5,8 +5,8 @@ const mainnet = (address: string) => ({
     [DeploymentNetwork.Tenderly]: address
 });
 
-const rinkeby = (address: string) => ({
-    [DeploymentNetwork.Rinkeby]: address
+const sepolia = (address: string) => ({
+    [DeploymentNetwork.Sepolia]: address
 });
 
 const TestNamedAccounts = {
@@ -62,7 +62,7 @@ const SushiSwapNamedAccounts = {
 export const NamedAccounts = {
     deployer: {
         ...mainnet('ledger://0x5bEBA4D3533a963Dedb270a95ae5f7752fA0Fe22'),
-        ...rinkeby('ledger://0x0f28D58c00F9373C00811E9576eE803B4eF98abe')
+        ...sepolia('ledger://0x0f28D58c00F9373C00811E9576eE803B4eF98abe')
     },
     deployerV2: { ...mainnet('0xdfeE8DC240c6CadC2c7f7f9c257c259914dEa84E') },
     foundationMultisig: { ...mainnet('0xeBeD45Ca22fcF70AdCcAb7618C51A3Dbb06C8d83') },
