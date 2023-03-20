@@ -1,5 +1,4 @@
-import { MAX_UINT256, PPM_RESOLUTION } from './Constants';
-import { DEFAULT_DECIMALS } from './TokenData';
+import { MAX_UINT256, PPM_RESOLUTION, DEFAULT_DECIMALS } from './Constants';
 import Decimal from 'decimal.js';
 import { BigNumber, BigNumberish } from 'ethers';
 

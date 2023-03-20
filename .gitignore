@@ -5,10 +5,17 @@
 node_modules
 .env
 
-
 dist
 out
 cache
 cache_forge
 artifacts
 typechain-types
+
+contracts/hardhat-dependency-compiler
+
+deployments/mainnet/solcInputs/*
+deployments/hardhat/*
+deployments/tenderly/*
+
+fork-*.zip

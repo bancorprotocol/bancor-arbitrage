@@ -20,6 +20,8 @@ export const ZERO_ADDRESS = AddressZero;
 export const ZERO_FRACTION = { n: 0, d: 1 };
 export const PPM_RESOLUTION = 1_000_000;
 export const ARB_CONTRACT_ADDRESS = '0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3';
+export const DEFAULT_DECIMALS = 18;
+export const NATIVE_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 export enum TradingStatusUpdateReason {
     Default = 0,
