@@ -10,6 +10,7 @@
     "test": "forge test",
     "test:deploy": "yarn deploy:prepare:fork && TEST_FORK=1 ./deployments/run-fork.sh HARDHAT_NETWORK=tenderly mocha --require hardhat/register --extension ts --recursive --exit --timeout 600000 --bail --no-exit 'deploy/tests/**/*.ts'",
     "coverage": "forge coverage",
+    "coverage:genhtml": "forge coverage --report lcov && genhtml lcov.info --branch-coverage --output-dir coverage",
     "gas-report": "forge test --gas-report",
     "deploy:prepare": "rm -rf ./node_modules && rm yarn.lock && yarn && yarn rebuild",
     "deploy:prepare:fork": "rm -rf deployments/tenderly && cp -rf deployments/mainnet/. deployments/tenderly",

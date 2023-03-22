@@ -10,6 +10,9 @@ import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
+import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
+
+import "hardhat/console.sol";
 
 contract MockExchanges {
     using SafeERC20 for IERC20;
@@ -71,7 +74,7 @@ contract MockExchanges {
             expectedBalance = prevBalance + gain;
         }
 
-        if (expectedBalance < token.balanceOf(address(this))) {
+        if (token.balanceOf(address(this)) < expectedBalance) {
             revert InsufficientFlashLoanReturn();
         }
         emit FlashLoanCompleted({ token: token, borrower: msg.sender, amount: amount, feeAmount: feeAmount });
@@ -105,6 +108,19 @@ contract MockExchanges {
         address /* beneficiary */
     ) external payable returns (uint256) {
         return mockSwap(sourceToken, targetToken, sourceAmount, msg.sender, deadline, minReturnAmount);
+    }
+
+    /**
+     * Carbon controller trade
+     */
+    function tradeBySourceAmount(
+        Token sourceToken,
+        Token targetToken,
+        TradeAction[] calldata tradeActions,
+        uint256 deadline,
+        uint128 minReturn
+    ) external payable returns (uint128) {
+        return mockCarbonTrade(sourceToken, targetToken, tradeActions, msg.sender, deadline, minReturn);
     }
 
     /**
@@ -199,6 +215,36 @@ contract MockExchanges {
         }
         require(targetAmount >= minTargetAmount, "InsufficientTargetAmount");
         targetToken.safeTransfer(trader, targetAmount);
+        return targetAmount;
+    }
+
+    function mockCarbonTrade(
+        Token sourceToken,
+        Token targetToken,
+        TradeAction[] memory tradeActions,
+        address trader,
+        uint deadline,
+        uint128 minTargetAmount
+    ) private returns (uint128) {
+        require(deadline >= block.timestamp, "Swap timeout");
+        // calculate total source amount from individual trade actions
+        uint128 sourceAmount = 0;
+        for (uint i = 0; i < tradeActions.length; ++i) {
+            sourceAmount += tradeActions[i].amount;
+        }
+        // withdraw source amount
+        sourceToken.safeTransferFrom(trader, address(this), uint(sourceAmount));
+
+        // transfer target amount
+        // receive _outputAmount tokens per swap
+        uint128 targetAmount;
+        if (_profit) {
+            targetAmount = sourceAmount + uint128(_outputAmount);
+        } else {
+            targetAmount = sourceAmount - uint128(_outputAmount);
+        }
+        require(targetAmount >= minTargetAmount, "InsufficientTargetAmount");
+        targetToken.safeTransfer(trader, uint(targetAmount));
         return targetAmount;
     }
 }
