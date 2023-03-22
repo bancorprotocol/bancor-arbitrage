@@ -48,6 +48,8 @@ contract BancorArbitrageTest is Test {
     uint private constant AMOUNT = 1000 ether;
     uint private constant MIN_LIQUIDITY_FOR_TRADING = 1000 ether;
     address private constant NATIVE_TOKEN_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    uint private constant FIRST_EXCHANGE_ID = 1;
+    uint private constant LAST_EXCHANGE_ID = 6;
 
     enum ExchangeId {
         INVALID,
@@ -94,7 +96,7 @@ contract BancorArbitrageTest is Test {
     event FlashLoanCompleted(Token indexed token, address indexed borrower, uint256 amount, uint256 feeAmount);
 
     /**
-     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * @dev emitted when the allowance of a `spender` for an `owner` is set by
      * a call to {approve}. `value` is the new allowance.
      */
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -158,7 +160,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test should be able to initialize new implementation
+     * @dev test should be able to initialize new implementation
      */
     function testShouldBeAbleToInitializeImpl() public {
         BancorArbitrage __bancorArbitrage = new BancorArbitrage(
@@ -175,7 +177,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid BNT contract
+     * @dev test revert when deploying BancorArbitrage with an invalid BNT contract
      */
     function testShouldRevertWhenInitializingWithInvalidBNTContract() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -192,7 +194,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid burner wallet
+     * @dev test revert when deploying BancorArbitrage with an invalid burner wallet
      */
     function testShouldRevertWhenInitializingWithInvalidBurnerWallet() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -209,7 +211,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid Bancor V2 contract
+     * @dev test revert when deploying BancorArbitrage with an invalid Bancor V2 contract
      */
     function testShouldRevertWhenInitializingWithInvalidBancorV2Contract() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -226,7 +228,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid Bancor V3 contract
+     * @dev test revert when deploying BancorArbitrage with an invalid Bancor V3 contract
      */
     function testShouldRevertWhenInitializingWithInvalidBancorV3Contract() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -243,7 +245,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid Uni V2 router
+     * @dev test revert when deploying BancorArbitrage with an invalid Uni V2 router
      */
     function testShouldRevertWhenInitializingWithInvalidUniV2Router() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -260,7 +262,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid Uni V3 router
+     * @dev test revert when deploying BancorArbitrage with an invalid Uni V3 router
      */
     function testShouldRevertWhenInitializingWithInvalidUniV3Router() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -277,7 +279,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid Sushiswap router
+     * @dev test revert when deploying BancorArbitrage with an invalid Sushiswap router
      */
     function testShouldRevertWhenInitializingWithInvalidSushiswapRouter() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -294,7 +296,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test revert when deploying BancorArbitrage with an invalid CarbonController contract
+     * @dev test revert when deploying BancorArbitrage with an invalid CarbonController contract
      */
     function testShouldRevertWhenInitializingWithInvalidCarbonControllerContract() public {
         vm.expectRevert(InvalidAddress.selector);
@@ -457,7 +459,7 @@ contract BancorArbitrageTest is Test {
     /// --- Flashloan tests --- ///
 
     /**
-     * @dev Test that onFlashloan cannot be called directly
+     * @dev test that onFlashloan cannot be called directly
      */
     function testShouldntBeAbleToCallOnFlashloanDirectly() public {
         vm.expectRevert(BancorArbitrage.InvalidFlashLoanCaller.selector);
@@ -465,7 +467,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test correct obtaining and repayment of flashloan
+     * @dev test correct obtaining and repayment of flashloan
      */
     function testShouldCorrectlyObtainAndRepayFlashloan() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
@@ -475,7 +477,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Test should revert if flashloan cannot be obtained
+     * @dev test should revert if flashloan cannot be obtained
      */
     function testShouldRevertIfFlashloanCannotBeObtained() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
@@ -573,8 +575,8 @@ contract BancorArbitrageTest is Test {
      * @dev should approve max amount for trading on each first swap for token and exchange
      */
     function testShouldApproveERC20TokensForEachExchange(uint16 exchangeId) public {
-        // only 1 - 6 are valid exchange ids
-        exchangeId = uint16(bound(exchangeId, 1, 6));
+        // bound to valid exchange ids
+        exchangeId = uint16(bound(exchangeId, FIRST_EXCHANGE_ID, LAST_EXCHANGE_ID));
         address[] memory tokensToTrade = new address[](3);
         tokensToTrade[0] = address(arbToken1);
         tokensToTrade[1] = address(arbToken2);
@@ -638,7 +640,7 @@ contract BancorArbitrageTest is Test {
         // limit arbAmount to AMOUNT
         vm.assume(arbAmount > 0 && arbAmount < AMOUNT);
         // test exchange ids 1 - 5 (w/o Carbon)
-        exchangeId = uint16(bound(exchangeId, 1, 5));
+        exchangeId = uint16(bound(exchangeId, FIRST_EXCHANGE_ID, 5));
         address[] memory tokensToTrade = new address[](3);
         tokensToTrade[0] = address(arbToken1);
         tokensToTrade[1] = address(arbToken2);
@@ -668,8 +670,8 @@ contract BancorArbitrageTest is Test {
     function testArbitrageWithDifferentRoutes(uint routeLength, uint16 exchangeId, uint arbAmount, uint fee) public {
         // bound route len from 2 to 10
         routeLength = bound(routeLength, 2, 10);
-        // bound exchange id from 1 to 6
-        exchangeId = uint16(bound(exchangeId, 1, 6));
+        // bound exchange id to valid exchange ids
+        exchangeId = uint16(bound(exchangeId, FIRST_EXCHANGE_ID, LAST_EXCHANGE_ID));
         // bound arb amount from 1 to AMOUNT
         arbAmount = bound(arbAmount, 1, AMOUNT);
         // get routes
@@ -761,12 +763,12 @@ contract BancorArbitrageTest is Test {
             500
         );
         routes[1].minTargetAmount = 2 ** 128;
-        vm.expectRevert(BancorArbitrage.TargetAmountOverflow.selector);
+        vm.expectRevert(BancorArbitrage.MinTargetAmountTooHigh.selector);
         bancorArbitrage.execute(routes, AMOUNT);
     }
 
     /**
-     * @dev Get 3 routes for arb testing
+     * @dev get 3 routes for arb testing
      */
     function getRoutes() public view returns (BancorArbitrage.Route[] memory routes) {
         routes = new BancorArbitrage.Route[](3);
@@ -804,7 +806,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Get 3 routes for arb testing with custom tokens and 2nd exchange id
+     * @dev get 3 routes for arb testing with custom tokens and 2nd exchange id
      * @param exchangeId - which exchange to use for middle swap
      * @param token1 - first swapped token
      * @param token2 - second swapped token
@@ -868,7 +870,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Get several routes for arb testing with custom route length
+     * @dev get several routes for arb testing with custom route length
      * @param routeLength - how many routes to generate
      * @param exchangeId - which exchange to perform swaps on
      * @param fee - Uni V3 fee, can be 100, 500 or 3000
@@ -924,7 +926,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Get 3 routes for arb testing with custom tokens and 2nd exchange = carbon
+     * @dev get 3 routes for arb testing with custom tokens and 2nd exchange = carbon
      * @param token1 - first swapped token
      * @param token2 - second swapped token
      * @param tradeActionCount - count of individual trade actions passed to carbon trade
@@ -984,7 +986,7 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev Get custom data for trading on Carbon
+     * @dev get custom data for trading on Carbon
      * @param amount the amount to be traded
      * @return data the encoded trading data
      */

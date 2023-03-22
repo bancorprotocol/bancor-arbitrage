@@ -12,8 +12,6 @@ import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
 import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 
-import "hardhat/console.sol";
-
 contract MockExchanges {
     using SafeERC20 for IERC20;
     using TokenLibrary for Token;
@@ -120,7 +118,12 @@ contract MockExchanges {
         uint256 deadline,
         uint128 minReturn
     ) external payable returns (uint128) {
-        return mockCarbonTrade(sourceToken, targetToken, tradeActions, msg.sender, deadline, minReturn);
+        // calculate total source amount from individual trade actions
+        uint256 sourceAmount = 0;
+        for (uint i = 0; i < tradeActions.length; ++i) {
+            sourceAmount += uint128(tradeActions[i].amount);
+        }
+        return uint128(mockSwap(sourceToken, targetToken, sourceAmount, msg.sender, deadline, minReturn));
     }
 
     /**
@@ -215,36 +218,6 @@ contract MockExchanges {
         }
         require(targetAmount >= minTargetAmount, "InsufficientTargetAmount");
         targetToken.safeTransfer(trader, targetAmount);
-        return targetAmount;
-    }
-
-    function mockCarbonTrade(
-        Token sourceToken,
-        Token targetToken,
-        TradeAction[] memory tradeActions,
-        address trader,
-        uint deadline,
-        uint128 minTargetAmount
-    ) private returns (uint128) {
-        require(deadline >= block.timestamp, "Swap timeout");
-        // calculate total source amount from individual trade actions
-        uint128 sourceAmount = 0;
-        for (uint i = 0; i < tradeActions.length; ++i) {
-            sourceAmount += tradeActions[i].amount;
-        }
-        // withdraw source amount
-        sourceToken.safeTransferFrom(trader, address(this), uint(sourceAmount));
-
-        // transfer target amount
-        // receive _outputAmount tokens per swap
-        uint128 targetAmount;
-        if (_profit) {
-            targetAmount = sourceAmount + uint128(_outputAmount);
-        } else {
-            targetAmount = sourceAmount - uint128(_outputAmount);
-        }
-        require(targetAmount >= minTargetAmount, "InsufficientTargetAmount");
-        targetToken.safeTransfer(trader, uint(targetAmount));
         return targetAmount;
     }
 }

@@ -33,7 +33,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error InvalidRouteLength();
     error InvalidInitialAndFinalTokens();
     error InvalidFlashLoanCaller();
-    error TargetAmountOverflow();
+    error MinTargetAmountTooHigh();
 
     // trade args
     struct Route {
@@ -87,8 +87,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     // Carbon controller contract
     ICarbonController internal immutable _carbonController;
 
-    // Burner wallet address
-    address internal immutable _burnerWallet;
+    // Dust wallet address
+    address internal immutable _dustWallet;
 
     // rewards defaults
     Rewards internal _rewards;
@@ -123,7 +123,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     constructor(
         IERC20 initBnt,
-        address initBurnerWallet,
+        address initDustWallet,
         IBancorNetworkV2 initBancorNetworkV2,
         IBancorNetwork initBancorNetworkV3,
         IUniswapV2Router02 initUniswapV2Router,
@@ -132,7 +132,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         ICarbonController initCarbonController
     )
         validAddress(address(initBnt))
-        validAddress(address(initBurnerWallet))
+        validAddress(address(initDustWallet))
         validAddress(address(initBancorNetworkV2))
         validAddress(address(initBancorNetworkV3))
         validAddress(address(initUniswapV2Router))
@@ -142,7 +142,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     {
         _bnt = initBnt;
         _weth = IERC20(initUniswapV2Router.WETH());
-        _burnerWallet = initBurnerWallet;
+        _dustWallet = initDustWallet;
         _bancorNetworkV2 = initBancorNetworkV2;
         _bancorNetworkV3 = initBancorNetworkV3;
         _uniswapV2Router = initUniswapV2Router;
@@ -436,7 +436,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         if (exchangeId == EXCHANGE_ID_CARBON) {
             // Carbon accepts 2^128 - 1 max for minTargetAmount
             if (minTargetAmount > type(uint128).max) {
-                revert TargetAmountOverflow();
+                revert MinTargetAmountTooHigh();
             }
             // allow the carbon controller to withdraw the source tokens
             _setExchangeAllowance(sourceToken, address(_carbonController), sourceAmount);
@@ -457,8 +457,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
             uint remainingSourceTokens = sourceToken.balanceOf(address(this));
             if (remainingSourceTokens > 0) {
-                // transfer any remaining source tokens to a burner wallet
-                sourceToken.safeTransfer(_burnerWallet, remainingSourceTokens);
+                // transfer any remaining source tokens to a dust wallet
+                sourceToken.safeTransfer(_dustWallet, remainingSourceTokens);
             }
 
             return;
