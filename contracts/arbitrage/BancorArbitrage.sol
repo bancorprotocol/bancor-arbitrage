@@ -17,6 +17,7 @@ import { Upgradeable } from "../utility/Upgradeable.sol";
 import { Utils } from "../utility/Utils.sol";
 import { IBancorNetwork, IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
 import { IBancorNetworkV2 } from "../exchanges/interfaces/IBancorNetworkV2.sol";
+import { ICarbonController, TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 import { PPM_RESOLUTION } from "../utility/Constants.sol";
 import { MathEx } from "../utility/MathEx.sol";
 
@@ -32,6 +33,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error InvalidRouteLength();
     error InvalidInitialAndFinalTokens();
     error InvalidFlashLoanCaller();
+    error MinTargetAmountTooHigh();
 
     // trade args
     struct Route {
@@ -41,6 +43,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         uint256 deadline;
         address customAddress;
         uint256 customInt;
+        bytes customData;
     }
 
     // rewards settings
@@ -55,6 +58,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     uint16 public constant EXCHANGE_ID_UNISWAP_V2 = 3;
     uint16 public constant EXCHANGE_ID_UNISWAP_V3 = 4;
     uint16 public constant EXCHANGE_ID_SUSHISWAP = 5;
+    uint16 public constant EXCHANGE_ID_CARBON = 6;
 
     // maximum number of trade routes supported
     uint256 private constant MAX_ROUTE_LENGTH = 10;
@@ -79,6 +83,12 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
     // sushiSwap router contract
     IUniswapV2Router02 internal immutable _sushiSwapRouter;
+
+    // Carbon controller contract
+    ICarbonController internal immutable _carbonController;
+
+    // Dust wallet address
+    address internal immutable _dustWallet;
 
     // rewards defaults
     Rewards internal _rewards;
@@ -113,26 +123,32 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     constructor(
         IERC20 initBnt,
+        address initDustWallet,
         IBancorNetworkV2 initBancorNetworkV2,
         IBancorNetwork initBancorNetworkV3,
         IUniswapV2Router02 initUniswapV2Router,
         ISwapRouter initUniswapV3Router,
-        IUniswapV2Router02 initSushiSwapRouter
+        IUniswapV2Router02 initSushiSwapRouter,
+        ICarbonController initCarbonController
     )
         validAddress(address(initBnt))
+        validAddress(address(initDustWallet))
         validAddress(address(initBancorNetworkV2))
         validAddress(address(initBancorNetworkV3))
         validAddress(address(initUniswapV2Router))
         validAddress(address(initUniswapV3Router))
         validAddress(address(initSushiSwapRouter))
+        validAddress(address(initCarbonController))
     {
         _bnt = initBnt;
         _weth = IERC20(initUniswapV2Router.WETH());
+        _dustWallet = initDustWallet;
         _bancorNetworkV2 = initBancorNetworkV2;
         _bancorNetworkV3 = initBancorNetworkV3;
         _uniswapV2Router = initUniswapV2Router;
         _uniswapV3Router = initUniswapV3Router;
         _sushiSwapRouter = initSushiSwapRouter;
+        _carbonController = initCarbonController;
     }
 
     /**
@@ -284,7 +300,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
                 routes[i].minTargetAmount,
                 routes[i].deadline,
                 routes[i].customAddress,
-                routes[i].customInt
+                routes[i].customInt,
+                routes[i].customData
             );
 
             // the current iteration target token is the source token in the next iteration
@@ -309,7 +326,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         uint256 minTargetAmount,
         uint256 deadline,
         address customAddress,
-        uint256 customInt
+        uint256 customInt,
+        bytes memory customData
     ) private {
         if (exchangeId == EXCHANGE_ID_BANCOR_V2) {
             // allow the network to withdraw the source tokens
@@ -410,6 +428,37 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
             if (tokenOut == address(_weth)) {
                 IWETH(address(_weth)).withdraw(_weth.balanceOf(address(this)));
+            }
+
+            return;
+        }
+
+        if (exchangeId == EXCHANGE_ID_CARBON) {
+            // Carbon accepts 2^128 - 1 max for minTargetAmount
+            if (minTargetAmount > type(uint128).max) {
+                revert MinTargetAmountTooHigh();
+            }
+            // allow the carbon controller to withdraw the source tokens
+            _setExchangeAllowance(sourceToken, address(_carbonController), sourceAmount);
+
+            uint256 val = sourceToken.isNative() ? sourceAmount : 0;
+
+            // decode the trade actions passed in as customData
+            TradeAction[] memory tradeActions = abi.decode(customData, (TradeAction[]));
+
+            // perform the trade
+            _carbonController.tradeBySourceAmount{ value: val }(
+                sourceToken,
+                targetToken,
+                tradeActions,
+                deadline,
+                uint128(minTargetAmount)
+            );
+
+            uint remainingSourceTokens = sourceToken.balanceOf(address(this));
+            if (remainingSourceTokens > 0) {
+                // transfer any remaining source tokens to a dust wallet
+                sourceToken.safeTransfer(_dustWallet, remainingSourceTokens);
             }
 
             return;

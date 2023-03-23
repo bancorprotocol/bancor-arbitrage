@@ -10,6 +10,7 @@ import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
+import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 
 contract MockExchanges {
     using SafeERC20 for IERC20;
@@ -71,7 +72,7 @@ contract MockExchanges {
             expectedBalance = prevBalance + gain;
         }
 
-        if (expectedBalance < token.balanceOf(address(this))) {
+        if (token.balanceOf(address(this)) < expectedBalance) {
             revert InsufficientFlashLoanReturn();
         }
         emit FlashLoanCompleted({ token: token, borrower: msg.sender, amount: amount, feeAmount: feeAmount });
@@ -105,6 +106,24 @@ contract MockExchanges {
         address /* beneficiary */
     ) external payable returns (uint256) {
         return mockSwap(sourceToken, targetToken, sourceAmount, msg.sender, deadline, minReturnAmount);
+    }
+
+    /**
+     * Carbon controller trade
+     */
+    function tradeBySourceAmount(
+        Token sourceToken,
+        Token targetToken,
+        TradeAction[] calldata tradeActions,
+        uint256 deadline,
+        uint128 minReturn
+    ) external payable returns (uint128) {
+        // calculate total source amount from individual trade actions
+        uint256 sourceAmount = 0;
+        for (uint i = 0; i < tradeActions.length; ++i) {
+            sourceAmount += uint128(tradeActions[i].amount);
+        }
+        return uint128(mockSwap(sourceToken, targetToken, sourceAmount, msg.sender, deadline, minReturn));
     }
 
     /**
