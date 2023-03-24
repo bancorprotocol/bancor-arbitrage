@@ -245,30 +245,51 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
     /**
      * @dev execute multi-step arbitrage trade between exchanges
+     * @param routes series of trades to be performed
+     * @param token initial trade token
+     * @param sourceAmount initial source amount
      */
     function execute(
         Route[] calldata routes,
+        Token token,
         uint256 sourceAmount
     ) public payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
-        // verify that the last token in the process is BNT
-        if ((address(routes[routes.length - 1].targetToken) != address(_bnt))) {
+        // verify that the last token in the process is the flashloan token
+        if ((address(routes[routes.length - 1].targetToken) != address(token))) {
             revert InvalidInitialAndFinalTokens();
         }
 
         // take a flashloan for the source amount on Bancor v3 and perform the trades
         _bancorNetworkV3.flashLoan(
-            Token(address(_bnt)),
+            token,
             sourceAmount,
             IFlashLoanRecipient(address(this)),
             abi.encode(routes, sourceAmount)
         );
 
+        // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor V3 network
+        if (address(token) != address(_bnt)) {
+            uint leftover = token.balanceOf(address(this));
+            _trade(
+                EXCHANGE_ID_BANCOR_V3,
+                token,
+                Token(address(_bnt)),
+                leftover,
+                0,
+                block.timestamp,
+                address(_bnt),
+                0,
+                ""
+            );
+        }
+
         // allocate the rewards
-        _allocateRewards(routes, sourceAmount, msg.sender);
+        _allocateRewards(routes, token, sourceAmount, msg.sender);
     }
 
     /**
      * @dev callback function for bancor V3 flashloan
+     * @dev performs the arbitrage trades
      */
     function onFlashLoan(
         address caller,
@@ -286,7 +307,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         (Route[] memory routes, uint256 sourceAmount) = abi.decode(data, (Route[], uint256));
 
         // perform the trade routes
-        Token sourceToken = Token(address(_bnt));
+        Token sourceToken = Token(address(erc20Token));
         for (uint256 i = 0; i < routes.length; i++) {
             // save the current balance
             uint256 previousBalance = routes[i].targetToken.balanceOf(address(this));
@@ -312,7 +333,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // return the flashloan
-        erc20Token.safeTransfer(msg.sender, amount + feeAmount);
+        Token(address(erc20Token)).safeTransfer(msg.sender, amount + feeAmount);
     }
 
     /**
@@ -470,7 +491,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev allocates the rewards to the caller and burns the rest
      */
-    function _allocateRewards(Route[] calldata routes, uint256 sourceAmount, address caller) internal {
+    function _allocateRewards(Route[] calldata routes, Token token, uint256 sourceAmount, address caller) internal {
         // get the total amount
         uint256 totalAmount = _bnt.balanceOf(address(this));
 
@@ -503,7 +524,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         // build the token path
         address[] memory path = new address[](routes.length + 1);
-        path[0] = address(_bnt);
+        path[0] = address(token);
         for (uint256 i = 0; i < routes.length; i++) {
             path[i + 1] = address(routes[i].targetToken);
         }
