@@ -248,27 +248,35 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     function execute(
         Route[] calldata routes,
+        Token token,
         uint256 sourceAmount
     ) public payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
-        // verify that the last token in the process is BNT
-        if ((address(routes[routes.length - 1].targetToken) != address(_bnt))) {
+        // verify that the last token in the process is the flashloan token
+        if ((routes[routes.length - 1].targetToken != token)) {
             revert InvalidInitialAndFinalTokens();
         }
 
         // take a flashloan for the source amount on Bancor v3 and perform the trades
         _bancorNetworkV3.flashLoan(
-            Token(address(_bnt)),
+            token,
             sourceAmount,
             IFlashLoanRecipient(address(this)),
             abi.encode(routes, sourceAmount)
         );
 
+        // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor Network V3
+        if (!token.isEqual(_bnt)) {
+            uint256 leftover = token.balanceOf(address(this));
+            _trade(EXCHANGE_ID_BANCOR_V3, token, Token(address(_bnt)), leftover, 1, block.timestamp, address(0), 0, "");
+        }
+
         // allocate the rewards
-        _allocateRewards(routes, sourceAmount, msg.sender);
+        _allocateRewards(routes, token, sourceAmount, msg.sender);
     }
 
     /**
      * @dev callback function for bancor V3 flashloan
+     * @dev performs the arbitrage trades
      */
     function onFlashLoan(
         address caller,
@@ -286,7 +294,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         (Route[] memory routes, uint256 sourceAmount) = abi.decode(data, (Route[], uint256));
 
         // perform the trade routes
-        Token sourceToken = Token(address(_bnt));
+        Token sourceToken = Token(address(erc20Token));
         for (uint256 i = 0; i < routes.length; i++) {
             // save the current balance
             uint256 previousBalance = routes[i].targetToken.balanceOf(address(this));
@@ -312,7 +320,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // return the flashloan
-        erc20Token.safeTransfer(msg.sender, amount + feeAmount);
+        Token(address(erc20Token)).safeTransfer(msg.sender, amount + feeAmount);
     }
 
     /**
@@ -455,7 +463,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
                 uint128(minTargetAmount)
             );
 
-            uint remainingSourceTokens = sourceToken.balanceOf(address(this));
+            uint256 remainingSourceTokens = sourceToken.balanceOf(address(this));
             if (remainingSourceTokens > 0) {
                 // transfer any remaining source tokens to a dust wallet
                 sourceToken.safeTransfer(_dustWallet, remainingSourceTokens);
@@ -470,7 +478,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev allocates the rewards to the caller and burns the rest
      */
-    function _allocateRewards(Route[] calldata routes, uint256 sourceAmount, address caller) internal {
+    function _allocateRewards(Route[] calldata routes, Token token, uint256 sourceAmount, address caller) internal {
         // get the total amount
         uint256 totalAmount = _bnt.balanceOf(address(this));
 
@@ -503,7 +511,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         // build the token path
         address[] memory path = new address[](routes.length + 1);
-        path[0] = address(_bnt);
+        path[0] = address(token);
         for (uint256 i = 0; i < routes.length; i++) {
             path[i + 1] = address(routes[i].targetToken);
         }
@@ -514,11 +522,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev set exchange allowance to the max amount if it's less than the input amount
      */
-    function _setExchangeAllowance(Token token, address exchange, uint inputAmount) private {
+    function _setExchangeAllowance(Token token, address exchange, uint256 inputAmount) private {
         if (token.isNative()) {
             return;
         }
-        uint allowance = token.toIERC20().allowance(address(this), exchange);
+        uint256 allowance = token.toIERC20().allowance(address(this), exchange);
         if (allowance < inputAmount) {
             // increase allowance to the max amount if allowance < inputAmount
             token.safeIncreaseAllowance(exchange, type(uint256).max - allowance);

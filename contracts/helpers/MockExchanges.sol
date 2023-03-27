@@ -21,21 +21,29 @@ contract MockExchanges {
 
     IERC20 private immutable _weth;
 
+    address private immutable _bnt;
+
     // what amount is added or subtracted to/from the input amount on swap
     uint private immutable _outputAmount;
 
     // true if the gain amount is added to the swap input, false if subtracted
     bool private immutable _profit;
 
+    // mapping for flashloan-whitelisted tokens
+    mapping(address => bool) public isWhitelisted;
+
     error InsufficientFlashLoanReturn();
+    error NotWhitelisted();
+    error ZeroValue();
 
     /**
      * @dev triggered when a flash-loan is completed
      */
     event FlashLoanCompleted(Token indexed token, address indexed borrower, uint256 amount, uint256 feeAmount);
 
-    constructor(IERC20 weth, uint outputAmount, bool profit) {
+    constructor(IERC20 weth, address bnt, uint outputAmount, bool profit) {
         _weth = weth;
+        _bnt = bnt;
         _outputAmount = outputAmount;
         _profit = profit;
     }
@@ -51,6 +59,9 @@ contract MockExchanges {
      * @dev v3 network flashloan mock
      */
     function flashLoan(Token token, uint256 amount, IFlashLoanRecipient recipient, bytes calldata data) external {
+        if (!isWhitelisted[address(token)]) {
+            revert NotWhitelisted();
+        }
         uint feeAmount = 0;
         uint prevBalance = token.balanceOf(address(this));
 
@@ -63,7 +74,8 @@ contract MockExchanges {
         // account for net gain in the token which is sent from this contract
         // decode data to count the swaps
         (BancorArbitrage.Route[] memory routes, ) = abi.decode(data, (BancorArbitrage.Route[], uint256));
-        uint swapCount = routes.length;
+        // if we flashloan in a different token than bnt, we make one additional swap at the end
+        uint swapCount = address(token) == _bnt ? routes.length : routes.length + 1;
         uint gain = swapCount * _outputAmount;
         uint expectedBalance;
         if (_profit) {
@@ -76,6 +88,20 @@ contract MockExchanges {
             revert InsufficientFlashLoanReturn();
         }
         emit FlashLoanCompleted({ token: token, borrower: msg.sender, amount: amount, feeAmount: feeAmount });
+    }
+
+    /**
+     * @dev add token to whitelist for flashloans
+     */
+    function addToWhitelist(address token) external {
+        isWhitelisted[token] = true;
+    }
+
+    /**
+     * @dev remove token from whitelist for flashloans
+     */
+    function removeFromWhitelist(address token) external {
+        isWhitelisted[token] = false;
     }
 
     /**
@@ -105,6 +131,9 @@ contract MockExchanges {
         uint256 deadline,
         address /* beneficiary */
     ) external payable returns (uint256) {
+        if (minReturnAmount == 0) {
+            revert ZeroValue();
+        }
         return mockSwap(sourceToken, targetToken, sourceAmount, msg.sender, deadline, minReturnAmount);
     }
 
