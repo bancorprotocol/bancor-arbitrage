@@ -70,10 +70,5 @@ interface IBancorNetwork {
      *
      * - the recipient's callback must return *at least* the borrowed amount and fee back to the specified return address
      */
-    function flashLoan(
-        Token token,
-        uint256 amount,
-        IFlashLoanRecipient recipient,
-        bytes calldata data
-    ) external;
+    function flashLoan(Token token, uint256 amount, IFlashLoanRecipient recipient, bytes calldata data) external;
 }

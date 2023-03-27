@@ -15,15 +15,18 @@ import { AccessDenied, ZeroValue, InvalidAddress } from "../contracts/utility/Ut
 import { TransparentUpgradeableProxyImmutable } from "../contracts/utility/TransparentUpgradeableProxyImmutable.sol";
 import { Utilities } from "./Utilities.t.sol";
 import { BancorArbitrage } from "../contracts/arbitrage/BancorArbitrage.sol";
-import { IBancorNetworkV2 } from "../contracts/exchanges/interfaces/IBancorNetworkV2.sol";
 import { MockExchanges } from "../contracts/helpers/MockExchanges.sol";
+import { MockNetworkSettings } from "../contracts/helpers/MockNetworkSettings.sol";
 import { TestBNT } from "../contracts/helpers/TestBNT.sol";
 import { TestWETH } from "../contracts/helpers/TestWETH.sol";
+import { IBancorNetworkV2 } from "../contracts/exchanges/interfaces/IBancorNetworkV2.sol";
 import { IBancorNetwork, IFlashLoanRecipient } from "../contracts/exchanges/interfaces/IBancorNetwork.sol";
 import { ICarbonController, TradeAction } from "../contracts/exchanges/interfaces/ICarbonController.sol";
+import { INetworkSettings } from "../contracts/interfaces/INetworkSettings.sol";
 import { PPM_RESOLUTION } from "../contracts/utility/Constants.sol";
 import { TestERC20Token } from "../contracts/helpers/TestERC20Token.sol";
 
+/* solhint-disable max-states-count */
 contract BancorArbitrageTest is Test {
     using TokenLibrary for Token;
 
@@ -35,7 +38,10 @@ contract BancorArbitrageTest is Test {
     TestERC20Token private arbToken2;
     TestERC20Token private nonWhitelistedToken;
     MockExchanges private exchanges;
+    MockNetworkSettings private networkSettings;
     ProxyAdmin private proxyAdmin;
+
+    BancorArbitrage.Exchanges private exchangeStruct;
 
     address[] private whitelistedTokens;
 
@@ -122,16 +128,16 @@ contract BancorArbitrageTest is Test {
         weth = new TestWETH();
         // deploy MockExchanges
         exchanges = new MockExchanges(IERC20(weth), address(bnt), 300 ether, true);
+        // init exchanges struct
+        exchangeStruct = getExchangeStruct(address(exchanges));
+        // deploy MockNetworkSettings
+        networkSettings = new MockNetworkSettings();
         // Deploy arbitrage contract
         bancorArbitrage = new BancorArbitrage(
             bnt,
             burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
+            exchangeStruct,
+            INetworkSettings(address(networkSettings))
         );
 
         bytes memory selector = abi.encodeWithSelector(bancorArbitrage.initialize.selector);
@@ -164,6 +170,11 @@ contract BancorArbitrageTest is Test {
         exchanges.addToWhitelist(address(arbToken1));
         exchanges.addToWhitelist(address(arbToken2));
         exchanges.addToWhitelist(NATIVE_TOKEN_ADDRESS);
+        // whitelist tokens in network settings
+        networkSettings.addToWhitelist(address(bnt));
+        networkSettings.addToWhitelist(address(arbToken1));
+        networkSettings.addToWhitelist(address(arbToken2));
+        networkSettings.addToWhitelist(NATIVE_TOKEN_ADDRESS);
 
         vm.stopPrank();
     }
@@ -175,12 +186,8 @@ contract BancorArbitrageTest is Test {
         BancorArbitrage __bancorArbitrage = new BancorArbitrage(
             bnt,
             burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
+            exchangeStruct,
+            INetworkSettings(address(networkSettings))
         );
         __bancorArbitrage.initialize();
     }
@@ -193,12 +200,8 @@ contract BancorArbitrageTest is Test {
         new BancorArbitrage(
             IERC20(address(0)),
             burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
+            exchangeStruct,
+            INetworkSettings(address(networkSettings))
         );
     }
 
@@ -207,118 +210,69 @@ contract BancorArbitrageTest is Test {
      */
     function testShouldRevertWhenInitializingWithInvalidBurnerWallet() public {
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            IERC20(address(0)),
-            address(0),
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, address(0), exchangeStruct, INetworkSettings(address(networkSettings)));
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Bancor V2 contract
      */
     function testShouldRevertWhenInitializingWithInvalidBancorV2Contract() public {
+        exchangeStruct.bancorNetworkV2 = IBancorNetworkV2(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(0)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(networkSettings)));
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Bancor V3 contract
      */
     function testShouldRevertWhenInitializingWithInvalidBancorV3Contract() public {
+        exchangeStruct.bancorNetworkV3 = IBancorNetwork(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(0)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(networkSettings)));
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Uni V2 router
      */
     function testShouldRevertWhenInitializingWithInvalidUniV2Router() public {
+        exchangeStruct.uniV2Router = IUniswapV2Router02(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(0)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(networkSettings)));
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Uni V3 router
      */
     function testShouldRevertWhenInitializingWithInvalidUniV3Router() public {
+        exchangeStruct.uniV3Router = ISwapRouter(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(0)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(networkSettings)));
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Sushiswap router
      */
     function testShouldRevertWhenInitializingWithInvalidSushiswapRouter() public {
+        exchangeStruct.sushiswapRouter = IUniswapV2Router02(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(0)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(networkSettings)));
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid CarbonController contract
      */
     function testShouldRevertWhenInitializingWithInvalidCarbonControllerContract() public {
+        exchangeStruct.carbonController = ICarbonController(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(0))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(networkSettings)));
+    }
+
+    /**
+     * @dev test revert when deploying BancorArbitrage with an invalid NetworkSettings contract
+     */
+    function testShouldRevertWhenInitializingWithInvalidNetworkSettings() public {
+        vm.expectRevert(InvalidAddress.selector);
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct, INetworkSettings(address(0)));
     }
 
     function testShouldBeInitialized() public {
@@ -1096,5 +1050,19 @@ contract BancorArbitrageTest is Test {
         TradeAction[] memory tradeActions = new TradeAction[](1);
         tradeActions[0] = TradeAction({ strategyId: 0, amount: uint128(amount) });
         data = abi.encode(tradeActions);
+    }
+
+    /**
+     * @dev get exchange struct for initialization of the arb bot
+     */
+    function getExchangeStruct(address _exchanges) public pure returns (BancorArbitrage.Exchanges memory exchangeList) {
+        exchangeList = BancorArbitrage.Exchanges({
+            bancorNetworkV2: IBancorNetworkV2(_exchanges),
+            bancorNetworkV3: IBancorNetwork(_exchanges),
+            uniV2Router: IUniswapV2Router02(_exchanges),
+            uniV3Router: ISwapRouter(_exchanges),
+            sushiswapRouter: IUniswapV2Router02(_exchanges),
+            carbonController: ICarbonController(_exchanges)
+        });
     }
 }
