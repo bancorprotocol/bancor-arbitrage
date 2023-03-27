@@ -34,6 +34,7 @@ contract MockExchanges {
 
     error InsufficientFlashLoanReturn();
     error NotWhitelisted();
+    error ZeroValue();
 
     /**
      * @dev triggered when a flash-loan is completed
@@ -130,6 +131,9 @@ contract MockExchanges {
         uint256 deadline,
         address /* beneficiary */
     ) external payable returns (uint256) {
+        if (minReturnAmount == 0) {
+            revert ZeroValue();
+        }
         return mockSwap(sourceToken, targetToken, sourceAmount, msg.sender, deadline, minReturnAmount);
     }
 

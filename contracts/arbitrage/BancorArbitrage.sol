@@ -245,9 +245,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
     /**
      * @dev execute multi-step arbitrage trade between exchanges
-     * @param routes series of trades to be performed
-     * @param token initial trade token
-     * @param sourceAmount initial source amount
      */
     function execute(
         Route[] calldata routes,
@@ -255,7 +252,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         uint256 sourceAmount
     ) public payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
         // verify that the last token in the process is the flashloan token
-        if ((address(routes[routes.length - 1].targetToken) != address(token))) {
+        if ((routes[routes.length - 1].targetToken != token)) {
             revert InvalidInitialAndFinalTokens();
         }
 
@@ -267,20 +264,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             abi.encode(routes, sourceAmount)
         );
 
-        // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor V3 network
-        if (address(token) != address(_bnt)) {
-            uint leftover = token.balanceOf(address(this));
-            _trade(
-                EXCHANGE_ID_BANCOR_V3,
-                token,
-                Token(address(_bnt)),
-                leftover,
-                0,
-                block.timestamp,
-                address(_bnt),
-                0,
-                ""
-            );
+        // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor Network V3
+        if (!token.isEqual(_bnt)) {
+            uint256 leftover = token.balanceOf(address(this));
+            _trade(EXCHANGE_ID_BANCOR_V3, token, Token(address(_bnt)), leftover, 1, block.timestamp, address(0), 0, "");
         }
 
         // allocate the rewards
@@ -476,7 +463,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
                 uint128(minTargetAmount)
             );
 
-            uint remainingSourceTokens = sourceToken.balanceOf(address(this));
+            uint256 remainingSourceTokens = sourceToken.balanceOf(address(this));
             if (remainingSourceTokens > 0) {
                 // transfer any remaining source tokens to a dust wallet
                 sourceToken.safeTransfer(_dustWallet, remainingSourceTokens);
@@ -535,11 +522,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev set exchange allowance to the max amount if it's less than the input amount
      */
-    function _setExchangeAllowance(Token token, address exchange, uint inputAmount) private {
+    function _setExchangeAllowance(Token token, address exchange, uint256 inputAmount) private {
         if (token.isNative()) {
             return;
         }
-        uint allowance = token.toIERC20().allowance(address(this), exchange);
+        uint256 allowance = token.toIERC20().allowance(address(this), exchange);
         if (allowance < inputAmount) {
             // increase allowance to the max amount if allowance < inputAmount
             token.safeIncreaseAllowance(exchange, type(uint256).max - allowance);

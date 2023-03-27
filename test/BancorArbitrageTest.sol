@@ -381,11 +381,7 @@ contract BancorArbitrageTest is Test {
     function testShouldCorrectlyDistributeRewardsAndBurnTokens() public {
         vm.startPrank(admin);
         BancorArbitrage.Route[] memory routes = getRoutes();
-        address[] memory tokens = new address[](4);
-        tokens[0] = address(arbToken1);
-        tokens[1] = address(arbToken2);
-        tokens[2] = NATIVE_TOKEN_ADDRESS;
-        tokens[3] = address(bnt);
+        address[4] memory tokens = [address(arbToken1), address(arbToken2), NATIVE_TOKEN_ADDRESS, address(bnt)];
         // try different flashloan tokens
         for (uint i = 0; i < 4; ++i) {
             // final route token must be the flashloan token
@@ -443,12 +439,7 @@ contract BancorArbitrageTest is Test {
     function testShouldCorrectlyDistributeRewardsToCallerIfExceedingMaxRewards() public {
         vm.startPrank(admin);
         BancorArbitrage.Route[] memory routes = getRoutes();
-        address[] memory tokens = new address[](4);
-        tokens[0] = address(arbToken1);
-        tokens[1] = address(arbToken2);
-        tokens[2] = NATIVE_TOKEN_ADDRESS;
-        tokens[3] = address(bnt);
-
+        address[4] memory tokens = [address(arbToken1), address(arbToken2), NATIVE_TOKEN_ADDRESS, address(bnt)];
         // try different flashloan tokens
         for (uint i = 0; i < 4; ++i) {
             // final route token must be the flashloan token
