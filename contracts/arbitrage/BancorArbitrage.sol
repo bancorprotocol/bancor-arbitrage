@@ -257,7 +257,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev execute multi-step arbitrage trade between exchanges
+     * @dev execute multi-step arbitrage trade between exchanges using a flashloan from Bancor Network V3
      */
     function execute(
         Route[] calldata routes,
@@ -265,7 +265,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         uint256 sourceAmount
     ) external payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
         // verify that the last token in the process is the flashloan token
-        if ((routes[routes.length - 1].targetToken != token)) {
+        if (routes[routes.length - 1].targetToken != token) {
             revert InvalidInitialAndFinalTokens();
         }
 
@@ -311,13 +311,21 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         Token(address(erc20Token)).safeTransfer(msg.sender, amount + feeAmount);
     }
 
+    /**
+     * @dev execute multi-step arbitrage trade between exchanges using user funds
+     * @dev must approve token before executing the function
+     */
     function arbitrage(
         Route[] calldata routes,
         Token token,
         uint sourceAmount
     ) external payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
+        // verify that the last token in the process is the arb token
+        if (routes[routes.length - 1].targetToken != token) {
+            revert InvalidInitialAndFinalTokens();
+        }
         // validate token is whitelisted
-        if (!token.isEqual(_bnt) || !_networkSettings.isTokenWhitelisted(token)) {
+        if (!token.isEqual(_bnt) && !_networkSettings.isTokenWhitelisted(token)) {
             revert NotWhitelisted();
         }
 
@@ -330,20 +338,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         // return the tokens to the user
         token.safeTransfer(msg.sender, sourceAmount);
 
-        // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor V3 network
-        if (address(token) != address(_bnt)) {
+        // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor Network V3
+        if (!token.isEqual(_bnt)) {
             uint leftover = token.balanceOf(address(this));
-            _trade(
-                EXCHANGE_ID_BANCOR_V3,
-                token,
-                Token(address(_bnt)),
-                leftover,
-                0,
-                block.timestamp,
-                address(_bnt),
-                0,
-                ""
-            );
+            _trade(EXCHANGE_ID_BANCOR_V3, token, Token(address(_bnt)), leftover, 1, block.timestamp, address(0), 0, "");
         }
 
         // allocate the rewards
