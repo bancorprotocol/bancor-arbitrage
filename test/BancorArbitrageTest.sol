@@ -304,11 +304,13 @@ contract BancorArbitrageTest is Test {
      * @dev testFail is a test which expects an assertion to fail
      */
     function testFailShouldIgnoreSettingSameArbRewardsSettings() public {
-        vm.prank(admin);
+        vm.startPrank(admin);
+        bancorArbitrage.setRewards(arbitrageRewardsDefaults);
         // this assertion will fail
         vm.expectEmit(false, false, false, false);
         emit RewardsUpdated(0, 0, 0, 0);
         bancorArbitrage.setRewards(arbitrageRewardsDefaults);
+        vm.stopPrank();
     }
 
     /**
@@ -318,11 +320,11 @@ contract BancorArbitrageTest is Test {
         vm.startPrank(admin);
         bancorArbitrage.setRewards(arbitrageRewardsDefaults);
         BancorArbitrage.Rewards memory rewards = bancorArbitrage.rewards();
-        assertEq(rewards.percentagePPM, 100_000);
+        assertEq(rewards.percentagePPM, 30_000);
 
         vm.expectEmit(true, true, true, true);
         emit RewardsUpdated(
-            arbitrageRewardsUpdated.percentagePPM,
+            arbitrageRewardsDefaults.percentagePPM,
             arbitrageRewardsUpdated.percentagePPM,
             arbitrageRewardsDefaults.maxAmount,
             arbitrageRewardsUpdated.maxAmount

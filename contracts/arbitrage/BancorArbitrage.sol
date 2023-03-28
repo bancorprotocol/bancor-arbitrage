@@ -231,7 +231,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     function setRewards(
         Rewards calldata newRewards
     ) external onlyAdmin validFee(newRewards.percentagePPM) greaterThanZero(newRewards.maxAmount) {
-        uint32 prevPercentagePPM = newRewards.percentagePPM;
+        uint32 prevPercentagePPM = _rewards.percentagePPM;
         uint256 prevMaxAmount = _rewards.maxAmount;
 
         // return if the rewards are the same
