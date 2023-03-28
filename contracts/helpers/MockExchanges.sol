@@ -32,6 +32,9 @@ contract MockExchanges {
     // mapping for flashloan-whitelisted tokens
     mapping(address => bool) public isWhitelisted;
 
+    // mapping for tokens tradeable on v3
+    mapping(Token => address) public collectionByPool;
+
     error InsufficientFlashLoanReturn();
     error NotWhitelisted();
     error ZeroValue();
@@ -59,6 +62,7 @@ contract MockExchanges {
      * @dev v3 network flashloan mock
      */
     function flashLoan(Token token, uint256 amount, IFlashLoanRecipient recipient, bytes calldata data) external {
+        // check if token is whitelisted
         if (!isWhitelisted[address(token)]) {
             revert NotWhitelisted();
         }
@@ -102,6 +106,20 @@ contract MockExchanges {
      */
     function removeFromWhitelist(address token) external {
         isWhitelisted[token] = false;
+    }
+
+    /**
+     * @dev set collection by pool
+     */
+    function setCollectionByPool(Token token) external {
+        collectionByPool[token] = address(token);
+    }
+
+    /**
+     * @dev reset collection by pool
+     */
+    function resetCollectionByPool(Token token) external {
+        collectionByPool[token] = address(0);
     }
 
     /**

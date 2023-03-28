@@ -15,15 +15,16 @@ import { AccessDenied, ZeroValue, InvalidAddress } from "../contracts/utility/Ut
 import { TransparentUpgradeableProxyImmutable } from "../contracts/utility/TransparentUpgradeableProxyImmutable.sol";
 import { Utilities } from "./Utilities.t.sol";
 import { BancorArbitrage } from "../contracts/arbitrage/BancorArbitrage.sol";
-import { IBancorNetworkV2 } from "../contracts/exchanges/interfaces/IBancorNetworkV2.sol";
 import { MockExchanges } from "../contracts/helpers/MockExchanges.sol";
 import { TestBNT } from "../contracts/helpers/TestBNT.sol";
 import { TestWETH } from "../contracts/helpers/TestWETH.sol";
+import { IBancorNetworkV2 } from "../contracts/exchanges/interfaces/IBancorNetworkV2.sol";
 import { IBancorNetwork, IFlashLoanRecipient } from "../contracts/exchanges/interfaces/IBancorNetwork.sol";
 import { ICarbonController, TradeAction } from "../contracts/exchanges/interfaces/ICarbonController.sol";
 import { PPM_RESOLUTION } from "../contracts/utility/Constants.sol";
 import { TestERC20Token } from "../contracts/helpers/TestERC20Token.sol";
 
+/* solhint-disable max-states-count */
 contract BancorArbitrageTest is Test {
     using TokenLibrary for Token;
 
@@ -37,10 +38,13 @@ contract BancorArbitrageTest is Test {
     MockExchanges private exchanges;
     ProxyAdmin private proxyAdmin;
 
+    BancorArbitrage.Exchanges private exchangeStruct;
+
     address[] private whitelistedTokens;
 
     address payable[] private users;
     address payable private admin;
+    address payable private user1;
     address payable private burnerWallet;
 
     uint private constant BNT_VIRTUAL_BALANCE = 1;
@@ -109,6 +113,7 @@ contract BancorArbitrageTest is Test {
         // create 4 users
         users = utils.createUsers(4);
         admin = users[0];
+        user1 = users[1];
         burnerWallet = users[3];
 
         // deploy contracts from admin
@@ -122,17 +127,10 @@ contract BancorArbitrageTest is Test {
         weth = new TestWETH();
         // deploy MockExchanges
         exchanges = new MockExchanges(IERC20(weth), address(bnt), 300 ether, true);
+        // init exchanges struct
+        exchangeStruct = getExchangeStruct(address(exchanges));
         // Deploy arbitrage contract
-        bancorArbitrage = new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        bancorArbitrage = new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
 
         bytes memory selector = abi.encodeWithSelector(bancorArbitrage.initialize.selector);
 
@@ -155,15 +153,25 @@ contract BancorArbitrageTest is Test {
         // send eth to exchange
         vm.deal(address(exchanges), MAX_SOURCE_AMOUNT);
         // send weth to exchange
-        vm.deal(admin, MAX_SOURCE_AMOUNT);
-        weth.deposit{ value: MAX_SOURCE_AMOUNT }();
+        vm.deal(admin, MAX_SOURCE_AMOUNT * 2);
+        weth.deposit{ value: MAX_SOURCE_AMOUNT * 2 }();
         weth.transfer(address(exchanges), MAX_SOURCE_AMOUNT);
+        // send tokens to user
+        nonWhitelistedToken.transfer(user1, MAX_SOURCE_AMOUNT * 2);
+        arbToken1.transfer(user1, MAX_SOURCE_AMOUNT * 2);
+        arbToken2.transfer(user1, MAX_SOURCE_AMOUNT * 2);
+        bnt.transfer(user1, MAX_SOURCE_AMOUNT * 5);
 
-        // whitelist tokens for flashloan
+        // whitelist tokens in exchanges mock
         exchanges.addToWhitelist(address(bnt));
         exchanges.addToWhitelist(address(arbToken1));
         exchanges.addToWhitelist(address(arbToken2));
         exchanges.addToWhitelist(NATIVE_TOKEN_ADDRESS);
+        // set pool collections for v3
+        exchanges.setCollectionByPool(Token(address(bnt)));
+        exchanges.setCollectionByPool(Token(address(arbToken1)));
+        exchanges.setCollectionByPool(Token(address(arbToken2)));
+        exchanges.setCollectionByPool(Token(NATIVE_TOKEN_ADDRESS));
 
         vm.stopPrank();
     }
@@ -172,16 +180,7 @@ contract BancorArbitrageTest is Test {
      * @dev test should be able to initialize new implementation
      */
     function testShouldBeAbleToInitializeImpl() public {
-        BancorArbitrage __bancorArbitrage = new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        BancorArbitrage __bancorArbitrage = new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
         __bancorArbitrage.initialize();
     }
 
@@ -190,16 +189,7 @@ contract BancorArbitrageTest is Test {
      */
     function testShouldRevertWhenInitializingWithInvalidBNTContract() public {
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            IERC20(address(0)),
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(IERC20(address(0)), burnerWallet, exchangeStruct);
     }
 
     /**
@@ -207,118 +197,61 @@ contract BancorArbitrageTest is Test {
      */
     function testShouldRevertWhenInitializingWithInvalidBurnerWallet() public {
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            IERC20(address(0)),
-            address(0),
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, address(0), exchangeStruct);
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Bancor V2 contract
      */
     function testShouldRevertWhenInitializingWithInvalidBancorV2Contract() public {
+        exchangeStruct.bancorNetworkV2 = IBancorNetworkV2(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(0)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Bancor V3 contract
      */
     function testShouldRevertWhenInitializingWithInvalidBancorV3Contract() public {
+        exchangeStruct.bancorNetworkV3 = IBancorNetwork(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(0)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Uni V2 router
      */
     function testShouldRevertWhenInitializingWithInvalidUniV2Router() public {
+        exchangeStruct.uniV2Router = IUniswapV2Router02(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(0)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Uni V3 router
      */
     function testShouldRevertWhenInitializingWithInvalidUniV3Router() public {
+        exchangeStruct.uniV3Router = ISwapRouter(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(0)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid Sushiswap router
      */
     function testShouldRevertWhenInitializingWithInvalidSushiswapRouter() public {
+        exchangeStruct.sushiswapRouter = IUniswapV2Router02(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(0)),
-            ICarbonController(address(exchanges))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
     }
 
     /**
      * @dev test revert when deploying BancorArbitrage with an invalid CarbonController contract
      */
     function testShouldRevertWhenInitializingWithInvalidCarbonControllerContract() public {
+        exchangeStruct.carbonController = ICarbonController(address(0));
         vm.expectRevert(InvalidAddress.selector);
-        new BancorArbitrage(
-            bnt,
-            burnerWallet,
-            IBancorNetworkV2(address(exchanges)),
-            IBancorNetwork(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ISwapRouter(address(exchanges)),
-            IUniswapV2Router02(address(exchanges)),
-            ICarbonController(address(0))
-        );
+        new BancorArbitrage(bnt, burnerWallet, exchangeStruct);
     }
 
     function testShouldBeInitialized() public {
@@ -342,11 +275,13 @@ contract BancorArbitrageTest is Test {
      * @dev testFail is a test which expects an assertion to fail
      */
     function testFailShouldIgnoreSettingSameArbRewardsSettings() public {
-        vm.prank(admin);
+        vm.startPrank(admin);
+        bancorArbitrage.setRewards(arbitrageRewardsDefaults);
         // this assertion will fail
         vm.expectEmit(false, false, false, false);
         emit RewardsUpdated(0, 0, 0, 0);
         bancorArbitrage.setRewards(arbitrageRewardsDefaults);
+        vm.stopPrank();
     }
 
     /**
@@ -356,11 +291,11 @@ contract BancorArbitrageTest is Test {
         vm.startPrank(admin);
         bancorArbitrage.setRewards(arbitrageRewardsDefaults);
         BancorArbitrage.Rewards memory rewards = bancorArbitrage.rewards();
-        assertEq(rewards.percentagePPM, 100_000);
+        assertEq(rewards.percentagePPM, 30_000);
 
         vm.expectEmit(true, true, true, true);
         emit RewardsUpdated(
-            arbitrageRewardsUpdated.percentagePPM,
+            arbitrageRewardsDefaults.percentagePPM,
             arbitrageRewardsUpdated.percentagePPM,
             arbitrageRewardsDefaults.maxAmount,
             arbitrageRewardsUpdated.maxAmount
@@ -378,8 +313,7 @@ contract BancorArbitrageTest is Test {
      * @dev test reward distribution and burn on arbitrage execution
      * @dev test with different flashloan tokens
      */
-    function testShouldCorrectlyDistributeRewardsAndBurnTokens() public {
-        vm.startPrank(admin);
+    function testShouldCorrectlyDistributeRewardsAndBurnTokens(bool userFunded) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         address[4] memory tokens = [address(arbToken1), address(arbToken2), NATIVE_TOKEN_ADDRESS, address(bnt)];
         // try different flashloan tokens
@@ -405,30 +339,36 @@ contract BancorArbitrageTest is Test {
             uint hopCount = tokens[i] == address(bnt) ? 3 : 4;
             uint totalRewards = 300e18 * hopCount;
 
+            vm.prank(admin);
             bancorArbitrage.setRewards(arbitrageRewardsUpdated);
 
             BancorArbitrage.Rewards memory rewards = bancorArbitrage.rewards();
 
             uint expectedUserReward = (totalRewards * rewards.percentagePPM) / PPM_RESOLUTION;
-            uint expectedBntBurnt = totalRewards - expectedUserReward;
+            uint expectedBntBurn = totalRewards - expectedUserReward;
 
-            uint16[3] memory _exchangeIds = [
-                uint16(ExchangeId.BANCOR_V2),
-                uint16(ExchangeId.SUSHISWAP),
-                uint16(ExchangeId.BANCOR_V2)
-            ];
-            address[4] memory _tokenPath = [tokens[i], firstTargetToken, address(arbToken2), tokens[i]];
             uint16[] memory exchangeIds = new uint16[](3);
             address[] memory tokenPath = new address[](4);
-            for (uint j = 0; j < 3; ++j) {
-                exchangeIds[j] = _exchangeIds[j];
-                tokenPath[j] = _tokenPath[j];
+
+            exchangeIds[0] = uint16(ExchangeId.BANCOR_V2);
+            exchangeIds[1] = uint16(ExchangeId.SUSHISWAP);
+            exchangeIds[2] = uint16(ExchangeId.BANCOR_V2);
+
+            tokenPath[0] = tokens[i];
+            tokenPath[1] = firstTargetToken;
+            tokenPath[2] = address(arbToken2);
+            tokenPath[3] = tokens[i];
+
+            vm.startPrank(user1);
+            // approve token if user-funded arb
+            if (userFunded) {
+                Token(tokens[i]).safeApprove(address(bancorArbitrage), AMOUNT);
             }
-            tokenPath[3] = _tokenPath[3];
 
             vm.expectEmit(true, true, true, true);
-            emit ArbitrageExecuted(admin, exchangeIds, tokenPath, AMOUNT, expectedBntBurnt, expectedUserReward);
-            bancorArbitrage.execute(routes, Token(tokens[i]), AMOUNT);
+            emit ArbitrageExecuted(user1, exchangeIds, tokenPath, AMOUNT, expectedBntBurn, expectedUserReward);
+            vm.stopPrank();
+            executeArbitrageNoApproval(routes, Token(tokens[i]), AMOUNT, userFunded);
         }
     }
 
@@ -436,15 +376,13 @@ contract BancorArbitrageTest is Test {
      * @dev test reward distribution if the rewards exceed the max set rewards
      * @dev test with different flashloan tokens
      */
-    function testShouldCorrectlyDistributeRewardsToCallerIfExceedingMaxRewards() public {
-        vm.startPrank(admin);
+    function testShouldCorrectlyDistributeRewardsToCallerIfExceedingMaxRewards(bool userFunded) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         address[4] memory tokens = [address(arbToken1), address(arbToken2), NATIVE_TOKEN_ADDRESS, address(bnt)];
         // try different flashloan tokens
         for (uint i = 0; i < 4; ++i) {
             // final route token must be the flashloan token
-            routes[2].targetToken = Token(tokens[i]);
-            routes[2].customAddress = tokens[i];
+            modifyRouteTargetToken(routes[2], tokens[i]);
             // first target token is arbToken1, so if we take flashloan in it, change it
             address firstTargetToken;
             if (tokens[i] == address(arbToken1)) {
@@ -452,8 +390,7 @@ contract BancorArbitrageTest is Test {
             } else {
                 firstTargetToken = address(arbToken1);
             }
-            routes[0].targetToken = Token(firstTargetToken);
-            routes[0].customAddress = firstTargetToken;
+            modifyRouteTargetToken(routes[0], firstTargetToken);
 
             // each hop through the route from MockExchanges adds 300e18 tokens to the output
             // so 3 hops = 3 * 300e18 = 900 BNT tokens more than start
@@ -464,12 +401,8 @@ contract BancorArbitrageTest is Test {
             uint totalRewards = 300e18 * hopCount;
 
             // set rewards maxAmount to 100
-            BancorArbitrage.Rewards memory newRewards = BancorArbitrage.Rewards({
-                percentagePPM: 40000,
-                maxAmount: 100
-            });
-
-            bancorArbitrage.setRewards(newRewards);
+            vm.prank(admin);
+            bancorArbitrage.setRewards(BancorArbitrage.Rewards({ percentagePPM: 40000, maxAmount: 100 }));
 
             BancorArbitrage.Rewards memory rewards = bancorArbitrage.rewards();
 
@@ -482,25 +415,30 @@ contract BancorArbitrageTest is Test {
             // update the expected user reward
             expectedUserReward = rewards.maxAmount;
 
-            uint expectedBurn = totalRewards - expectedUserReward;
+            uint expectedBntBurn = totalRewards - expectedUserReward;
 
-            uint16[3] memory _exchangeIds = [
-                uint16(ExchangeId.BANCOR_V2),
-                uint16(ExchangeId.SUSHISWAP),
-                uint16(ExchangeId.BANCOR_V2)
-            ];
-            address[4] memory _tokenPath = [tokens[i], firstTargetToken, address(arbToken2), tokens[i]];
             uint16[] memory exchangeIds = new uint16[](3);
             address[] memory tokenPath = new address[](4);
-            for (uint j = 0; j < 3; ++j) {
-                exchangeIds[j] = _exchangeIds[j];
-                tokenPath[j] = _tokenPath[j];
+
+            exchangeIds[0] = uint16(ExchangeId.BANCOR_V2);
+            exchangeIds[1] = uint16(ExchangeId.SUSHISWAP);
+            exchangeIds[2] = uint16(ExchangeId.BANCOR_V2);
+
+            tokenPath[0] = tokens[i];
+            tokenPath[1] = firstTargetToken;
+            tokenPath[2] = address(arbToken2);
+            tokenPath[3] = tokens[i];
+
+            vm.startPrank(user1);
+            // approve token if user-funded arb
+            if (userFunded) {
+                Token(tokens[i]).safeApprove(address(bancorArbitrage), AMOUNT);
             }
-            tokenPath[3] = _tokenPath[3];
 
             vm.expectEmit(true, true, true, true);
-            emit ArbitrageExecuted(admin, exchangeIds, tokenPath, AMOUNT, expectedBurn, expectedUserReward);
-            bancorArbitrage.execute(routes, Token(address(tokens[i])), AMOUNT);
+            emit ArbitrageExecuted(user1, exchangeIds, tokenPath, AMOUNT, expectedBntBurn, expectedUserReward);
+            vm.stopPrank();
+            executeArbitrageNoApproval(routes, Token(tokens[i]), AMOUNT, userFunded);
         }
     }
 
@@ -521,7 +459,7 @@ contract BancorArbitrageTest is Test {
         BancorArbitrage.Route[] memory routes = getRoutes();
         vm.expectEmit(true, true, true, true);
         emit FlashLoanCompleted(Token(address(bnt)), address(bancorArbitrage), AMOUNT, 0);
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
@@ -530,7 +468,7 @@ contract BancorArbitrageTest is Test {
     function testShouldRevertIfFlashloanCannotBeObtained() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         vm.expectRevert();
-        bancorArbitrage.execute(routes, Token(address(bnt)), type(uint256).max);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), type(uint256).max);
     }
 
     /// --- Trade tests --- ///
@@ -547,69 +485,79 @@ contract BancorArbitrageTest is Test {
         routes[1].deadline = 1;
         routes[2].deadline = 1;
         vm.expectRevert();
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
      * @dev test that trade attempt reverts if exchange id is not supported
      */
-    function testShouldRevertIfExchangeIdIsNotSupported() public {
+    function testShouldRevertIfExchangeIdIsNotSupported(bool userFunded) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         routes[0].exchangeId = 0;
+        vm.startPrank(user1);
+        Token(address(bnt)).safeApprove(address(bancorArbitrage), AMOUNT);
         vm.expectRevert(BancorArbitrage.InvalidExchangeId.selector);
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        vm.stopPrank();
+        executeArbitrageNoApproval(routes, Token(address(bnt)), AMOUNT, userFunded);
     }
 
     /**
      * @dev test that trade attempt with invalid route length
      */
-    function testShouldRevertIfRouteLengthIsInvalid() public {
+    function testShouldRevertIfRouteLengthIsInvalid(bool userFunded) public {
         // attempt to route through 11 exchanges
         BancorArbitrage.Route[] memory longRoute = new BancorArbitrage.Route[](11);
 
         vm.expectRevert(BancorArbitrage.InvalidRouteLength.selector);
-        bancorArbitrage.execute(longRoute, Token(address(bnt)), AMOUNT);
+        executeArbitrageNoApproval(longRoute, Token(address(bnt)), AMOUNT, userFunded);
         // attempt to route through 0 exchanges
         BancorArbitrage.Route[] memory emptyRoute = new BancorArbitrage.Route[](0);
         vm.expectRevert(BancorArbitrage.InvalidRouteLength.selector);
-        bancorArbitrage.execute(emptyRoute, Token(address(bnt)), AMOUNT);
+        executeArbitrageNoApproval(emptyRoute, Token(address(bnt)), AMOUNT, userFunded);
     }
 
     /**
      * @dev test attempting to trade with more than exchange's balance reverts
      */
-    function testShouldRevertIfExchangeDoesntHaveEnoughBalance() public {
+    function testShouldRevertIfExchangeDoesntHaveEnoughBalanceForFlashloan() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         vm.expectRevert("ERC20: transfer amount exceeds balance");
-        bancorArbitrage.execute(routes, Token(address(bnt)), MAX_SOURCE_AMOUNT * 2);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), MAX_SOURCE_AMOUNT * 2);
     }
 
     /**
      * @dev test reverts if min target amount is greater than expected
+     * @dev test both user-funded and flashloan arbs
      */
-    function testShouldRevertIfMinTargetAmountIsGreaterThanExpected() public {
+    function testShouldRevertIfMinTargetAmountIsGreaterThanExpected(bool userFunded) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         routes[0].minTargetAmount = type(uint256).max;
+        vm.startPrank(user1);
+        Token(address(bnt)).safeApprove(address(bancorArbitrage), AMOUNT);
         vm.expectRevert("InsufficientTargetAmount");
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        vm.stopPrank();
+        executeArbitrageNoApproval(routes, Token(address(bnt)), AMOUNT, userFunded);
     }
 
     /**
-     * @dev test reverts if the output token of the arb isn't the flashloan token
+     * @dev test reverts if the output token of the arb isn't the source token
+     * @dev test user-funded and flashloan arbs
      */
-    function testShouldRevertIfOutputTokenIsntTheFlashloanToken() public {
+    function testShouldRevertIfOutputTokenIsntTheArbToken(bool userFunded) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         routes[2].targetToken = Token(address(arbToken2));
         routes[2].customAddress = address(arbToken2);
         address[3] memory tokens = [address(bnt), address(arbToken1), NATIVE_TOKEN_ADDRESS];
         for (uint i = 0; i < 3; ++i) {
+            Token(tokens[i]).safeApprove(address(bancorArbitrage), AMOUNT);
             vm.expectRevert(BancorArbitrage.InvalidInitialAndFinalTokens.selector);
-            bancorArbitrage.execute(routes, Token(tokens[i]), AMOUNT);
+            executeArbitrageNoApproval(routes, Token(address(bnt)), AMOUNT, userFunded);
         }
     }
 
     /**
-     * @dev test reverts if the flashloan token isn't whitelisted
+     * @dev test reverts if the source token isn't whitelisted
+     * @dev test flashloan arbs
      */
     function testShouldRevertIfFlashloanTokenIsntWhitelisted() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
@@ -618,7 +566,21 @@ contract BancorArbitrageTest is Test {
         routes[2].customAddress = address(nonWhitelistedToken);
         vm.expectRevert(MockExchanges.NotWhitelisted.selector);
         // make arb with the non-whitelisted token
-        bancorArbitrage.execute(routes, Token(address(nonWhitelistedToken)), AMOUNT);
+        executeArbitrageNoApproval(routes, Token(address(nonWhitelistedToken)), AMOUNT, false);
+    }
+
+    /**
+     * @dev test reverts if the source token isn't tradeable on bancor network v3
+     * @dev test user-funded arb
+     */
+    function testShouldRevertIfUserFundedTokenIsntTradeable() public {
+        BancorArbitrage.Route[] memory routes = getRoutes();
+        // set last token to be the non-whitelisted token
+        routes[2].targetToken = Token(address(nonWhitelistedToken));
+        routes[2].customAddress = address(nonWhitelistedToken);
+        vm.expectRevert(BancorArbitrage.InvalidSourceToken.selector);
+        // make arb with the non-whitelisted token
+        executeArbitrageNoApproval(routes, Token(address(nonWhitelistedToken)), AMOUNT, true);
     }
 
     /**
@@ -631,14 +593,14 @@ contract BancorArbitrageTest is Test {
         routes[1].targetToken = Token(address(arbToken1));
         routes[1].customAddress = address(arbToken1);
         vm.expectRevert("ERC20: transfer amount exceeds balance");
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
      * @dev test trade approvals for erc-20 tokens for exchanges
      * @dev should approve max amount for trading on each first swap for token and exchange
      */
-    function testShouldApproveERC20TokensForEachExchange(uint16 exchangeId) public {
+    function testShouldApproveERC20TokensForEachExchange(uint16 exchangeId, bool userFunded) public {
         // bound to valid exchange ids
         exchangeId = uint16(bound(exchangeId, FIRST_EXCHANGE_ID, LAST_EXCHANGE_ID));
         address[] memory tokensToTrade = new address[](3);
@@ -666,7 +628,7 @@ contract BancorArbitrageTest is Test {
                     vm.expectEmit(true, true, true, true, address(arbToken1));
                     emit Approval(address(bancorArbitrage), address(exchanges), approveAmount);
                 }
-                bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+                executeArbitrage(routes, Token(address(bnt)), AMOUNT, userFunded);
             }
         }
     }
@@ -676,13 +638,26 @@ contract BancorArbitrageTest is Test {
     /**
      * @dev test arbitrage executed event gets emitted
      */
-    function testShouldEmitArbitrageExecutedOnSuccessfulArb() public {
+    function testShouldEmitArbitrageExecutedOnSuccessfulFlashloanArb() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         uint16[] memory exchangeIds = new uint16[](0);
         address[] memory tradePath = new address[](0);
         vm.expectEmit(false, false, false, false);
         emit ArbitrageExecuted(admin, exchangeIds, tradePath, AMOUNT, 0, 0);
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
+    }
+
+    /**
+     * @dev test arbitrage executed event gets emitted
+     */
+    function testShouldEmitArbitrageExecutedOnSuccessfulUserFundedArb() public {
+        BancorArbitrage.Route[] memory routes = getRoutes();
+        uint16[] memory exchangeIds = new uint16[](0);
+        address[] memory tradePath = new address[](0);
+        bnt.approve(address(bancorArbitrage), AMOUNT);
+        vm.expectEmit(false, false, false, false);
+        emit ArbitrageExecuted(admin, exchangeIds, tradePath, AMOUNT, 0, 0);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
@@ -694,14 +669,15 @@ contract BancorArbitrageTest is Test {
         BancorArbitrage.Route[] memory routes = getRoutes();
         // impersonate user
         vm.prank(user);
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
      * @dev fuzz test arbitrage execution
      * @dev go through all exchanges and use different amounts
+     * @dev test both user-funded and flashloan arbs
      */
-    function testArbitrage(uint16 exchangeId, uint arbAmount, uint fee) public {
+    function testArbitrage(uint16 exchangeId, uint arbAmount, uint fee, bool userFunded) public {
         // limit arbAmount to AMOUNT
         vm.assume(arbAmount > 0 && arbAmount < AMOUNT);
         // test exchange ids 1 - 5 (w/o Carbon)
@@ -724,7 +700,7 @@ contract BancorArbitrageTest is Test {
                     address(bnt),
                     fee
                 );
-                bancorArbitrage.execute(routes, Token(address(bnt)), arbAmount);
+                executeArbitrage(routes, Token(address(bnt)), arbAmount, userFunded);
             }
         }
     }
@@ -732,8 +708,15 @@ contract BancorArbitrageTest is Test {
     /**
      * @dev test arbitrages with different route length
      * @dev fuzz test 2 - 10 routes on any exchange with any amount
+     * @dev test both user-funded and flashloan arbs
      */
-    function testArbitrageWithDifferentRoutes(uint routeLength, uint16 exchangeId, uint arbAmount, uint fee) public {
+    function testArbitrageWithDifferentRoutes(
+        uint routeLength,
+        uint16 exchangeId,
+        uint arbAmount,
+        uint fee,
+        bool userFunded
+    ) public {
         // bound route len from 2 to 10
         routeLength = bound(routeLength, 2, 10);
         // bound exchange id to valid exchange ids
@@ -743,14 +726,15 @@ contract BancorArbitrageTest is Test {
         // get routes
         BancorArbitrage.Route[] memory routes = getRoutesCustomLength(routeLength, exchangeId, fee, arbAmount);
         // trade
-        bancorArbitrage.execute(routes, Token(address(bnt)), arbAmount);
+        executeArbitrage(routes, Token(address(bnt)), arbAmount, userFunded);
     }
 
     /**
      * @dev fuzz test arbs on carbon
      * @dev use different arb amounts and 1 to 11 trade actions for the carbon arb
+     * @dev test both user-funded and flashloan arbs
      */
-    function testArbitrageOnCarbon(uint arbAmount, uint tradeActionCount) public {
+    function testArbitrageOnCarbon(uint arbAmount, uint tradeActionCount, bool userFunded) public {
         // bound arb amount from 1 to AMOUNT
         arbAmount = bound(arbAmount, 1, AMOUNT);
         BancorArbitrage.Route[] memory routes = getRoutesCarbon(
@@ -759,15 +743,20 @@ contract BancorArbitrageTest is Test {
             arbAmount,
             tradeActionCount
         );
-        bancorArbitrage.execute(routes, Token(address(bnt)), arbAmount);
+        executeArbitrage(routes, Token(address(bnt)), arbAmount, userFunded);
     }
 
     /**
      * @dev test transferring leftover source tokens from the carbon trade to the burner wallet
+     * @dev test both user-funded and flashloan arbs
      * @param arbAmount arb amount to test with
      * @param leftoverAmount amount of tokens left over after the carbon trade
      */
-    function testShouldTransferLeftoverSourceTokensFromCarbonTrade(uint arbAmount, uint leftoverAmount) public {
+    function testShouldTransferLeftoverSourceTokensFromCarbonTrade(
+        uint arbAmount,
+        uint leftoverAmount,
+        bool userFunded
+    ) public {
         // bound arb amount from 1 to AMOUNT
         arbAmount = bound(arbAmount, 1, AMOUNT);
         // bound leftover amount from 1 to 300 units
@@ -782,7 +771,7 @@ contract BancorArbitrageTest is Test {
         uint sourceBalanceBefore = arbToken1.balanceOf(burnerWallet);
 
         // execute arb
-        bancorArbitrage.execute(routes, Token(address(bnt)), arbAmount);
+        executeArbitrage(routes, Token(address(bnt)), arbAmount, userFunded);
 
         // get source token balance in the burner wallet after the trade
         uint sourceBalanceAfter = arbToken1.balanceOf(burnerWallet);
@@ -795,10 +784,11 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev fuzz test arbitrage execution with flashloan token different from BNT
+     * @dev fuzz test arbitrage execution with different initial tokens
      * @dev go through all exchanges and use different amounts
+     * @dev test both user-funded and flashloan arbs
      */
-    function testArbitrageWithDifferentFlashloanTokens(uint16 exchangeId, uint arbAmount, uint fee) public {
+    function testArbitrageWithDifferentTokens(uint16 exchangeId, uint arbAmount, uint fee, bool userFunded) public {
         // limit arbAmount to AMOUNT
         vm.assume(arbAmount > 0 && arbAmount < AMOUNT);
         // test exchange ids 1 - 5 (w/o Carbon)
@@ -821,7 +811,42 @@ contract BancorArbitrageTest is Test {
                     tokensToTrade[i],
                     fee
                 );
-                bancorArbitrage.execute(routes, Token(tokensToTrade[i]), arbAmount);
+                executeArbitrage(routes, Token(tokensToTrade[i]), arbAmount, userFunded);
+            }
+        }
+    }
+
+    /**
+     * @dev fuzz test arbitrage execution with different initial tokens
+     * @dev go through all exchanges and use different amounts
+     */
+    function testUserFundedArbsReturnUsersTokens(uint16 exchangeId, uint arbAmount, uint fee) public {
+        // limit arbAmount to AMOUNT
+        vm.assume(arbAmount > 0 && arbAmount < AMOUNT);
+        // test exchange ids 1 - 5 (w/o Carbon)
+        exchangeId = uint16(bound(exchangeId, FIRST_EXCHANGE_ID, 5));
+        address[] memory tokensToTrade = new address[](3);
+        tokensToTrade[0] = address(arbToken1);
+        tokensToTrade[1] = address(arbToken2);
+        tokensToTrade[2] = NATIVE_TOKEN_ADDRESS;
+
+        // test with all token combinations
+        for (uint i = 0; i < 3; ++i) {
+            for (uint j = 0; j < 3; ++j) {
+                if (i == j) {
+                    continue;
+                }
+                BancorArbitrage.Route[] memory routes = getRoutesCustomTokens(
+                    exchangeId,
+                    tokensToTrade[i],
+                    tokensToTrade[j],
+                    tokensToTrade[i],
+                    fee
+                );
+                uint balanceBefore = Token(tokensToTrade[i]).balanceOf(user1);
+                executeArbitrage(routes, Token(tokensToTrade[i]), arbAmount, true);
+                uint balanceAfter = Token(tokensToTrade[i]).balanceOf(user1);
+                assertGe(balanceAfter, balanceBefore);
             }
         }
     }
@@ -829,10 +854,16 @@ contract BancorArbitrageTest is Test {
     /**
      * @dev test that arb attempt with 0 amount should revert
      */
-    function testShouldRevertArbWithZeroAmount() public {
+    function testShouldRevertArbWithZeroAmount(bool userFunded) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         vm.expectRevert(ZeroValue.selector);
-        bancorArbitrage.execute(routes, Token(address(bnt)), 0);
+        executeArbitrageNoApproval(routes, Token(address(bnt)), 0, userFunded);
+    }
+
+    function testShouldRevertArbWithUserFundsIfTokensHaventBeenApproved(uint) public {
+        BancorArbitrage.Route[] memory routes = getRoutes();
+        vm.expectRevert("ERC20: insufficient allowance");
+        bancorArbitrage.fundAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
@@ -848,7 +879,7 @@ contract BancorArbitrageTest is Test {
         );
         routes[1].customData = data;
         vm.expectRevert();
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
@@ -864,7 +895,7 @@ contract BancorArbitrageTest is Test {
         );
         routes[1].minTargetAmount = 2 ** 128;
         vm.expectRevert(BancorArbitrage.MinTargetAmountTooHigh.selector);
-        bancorArbitrage.execute(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
@@ -1096,5 +1127,68 @@ contract BancorArbitrageTest is Test {
         TradeAction[] memory tradeActions = new TradeAction[](1);
         tradeActions[0] = TradeAction({ strategyId: 0, amount: uint128(amount) });
         data = abi.encode(tradeActions);
+    }
+
+    /**
+     * @dev execute user-funded or flashloan arb
+     * @dev user-funded arb gets approved before execution
+     */
+    function executeArbitrage(
+        BancorArbitrage.Route[] memory routes,
+        Token token,
+        uint sourceAmount,
+        bool userFunded
+    ) public {
+        vm.startPrank(user1);
+        if (userFunded) {
+            token.safeIncreaseAllowance(address(bancorArbitrage), sourceAmount);
+            uint val = token.isNative() ? sourceAmount : 0;
+            bancorArbitrage.fundAndArb{ value: val }(routes, token, sourceAmount);
+        } else {
+            bancorArbitrage.flashloanAndArb(routes, token, sourceAmount);
+        }
+        vm.stopPrank();
+    }
+
+    /**
+     * @dev execute user-funded or flashloan arb
+     * @dev no approvals for token if user-funded
+     */
+    function executeArbitrageNoApproval(
+        BancorArbitrage.Route[] memory routes,
+        Token token,
+        uint sourceAmount,
+        bool userFunded
+    ) public {
+        vm.startPrank(user1);
+        if (userFunded) {
+            uint val = token.isNative() ? sourceAmount : 0;
+            bancorArbitrage.fundAndArb{ value: val }(routes, token, sourceAmount);
+        } else {
+            bancorArbitrage.flashloanAndArb(routes, token, sourceAmount);
+        }
+        vm.stopPrank();
+    }
+
+    /**
+     * @dev get exchange struct for initialization of the arb bot
+     */
+    function getExchangeStruct(address _exchanges) public pure returns (BancorArbitrage.Exchanges memory exchangeList) {
+        exchangeList = BancorArbitrage.Exchanges({
+            bancorNetworkV2: IBancorNetworkV2(_exchanges),
+            bancorNetworkV3: IBancorNetwork(_exchanges),
+            uniV2Router: IUniswapV2Router02(_exchanges),
+            uniV3Router: ISwapRouter(_exchanges),
+            sushiswapRouter: IUniswapV2Router02(_exchanges),
+            carbonController: ICarbonController(_exchanges)
+        });
+    }
+
+    /**
+     * @dev mofidy target token in an arb route
+     */
+    function modifyRouteTargetToken(BancorArbitrage.Route memory route, address token) public pure {
+        route.targetToken = Token(token);
+        route.customAddress = token;
     }
 }

@@ -26,6 +26,11 @@ interface IFlashLoanRecipient {
  */
 interface IBancorNetwork {
     /**
+     * @dev returns the respective pool collection for the provided pool
+     */
+    function collectionByPool(Token pool) external view returns (address);
+
+    /**
      * @dev performs a trade by providing the input source amount, sends the proceeds to the optional beneficiary (or
      * to the address of the caller, in case it's not supplied), and returns the trade target amount
      *
@@ -70,10 +75,5 @@ interface IBancorNetwork {
      *
      * - the recipient's callback must return *at least* the borrowed amount and fee back to the specified return address
      */
-    function flashLoan(
-        Token token,
-        uint256 amount,
-        IFlashLoanRecipient recipient,
-        bytes calldata data
-    ) external;
+    function flashLoan(Token token, uint256 amount, IFlashLoanRecipient recipient, bytes calldata data) external;
 }
