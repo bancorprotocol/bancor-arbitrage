@@ -11,6 +11,7 @@ import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
 import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
+import { INetworkSettings } from "../interfaces/INetworkSettings.sol";
 
 contract MockExchanges {
     using SafeERC20 for IERC20;
@@ -23,14 +24,14 @@ contract MockExchanges {
 
     address private immutable _bnt;
 
+    // network settings interface for checking if tokens are whitelisted for flashloan
+    INetworkSettings private immutable _networkSettings;
+
     // what amount is added or subtracted to/from the input amount on swap
     uint private immutable _outputAmount;
 
     // true if the gain amount is added to the swap input, false if subtracted
     bool private immutable _profit;
-
-    // mapping for flashloan-whitelisted tokens
-    mapping(address => bool) public isWhitelisted;
 
     error InsufficientFlashLoanReturn();
     error NotWhitelisted();
@@ -41,9 +42,10 @@ contract MockExchanges {
      */
     event FlashLoanCompleted(Token indexed token, address indexed borrower, uint256 amount, uint256 feeAmount);
 
-    constructor(IERC20 weth, address bnt, uint outputAmount, bool profit) {
+    constructor(IERC20 weth, address bnt, INetworkSettings networkSettings, uint outputAmount, bool profit) {
         _weth = weth;
         _bnt = bnt;
+        _networkSettings = networkSettings;
         _outputAmount = outputAmount;
         _profit = profit;
     }
@@ -59,7 +61,8 @@ contract MockExchanges {
      * @dev v3 network flashloan mock
      */
     function flashLoan(Token token, uint256 amount, IFlashLoanRecipient recipient, bytes calldata data) external {
-        if (!isWhitelisted[address(token)]) {
+        // check if token is whitelisted in network settings
+        if (!_networkSettings.isTokenWhitelisted(token)) {
             revert NotWhitelisted();
         }
         uint feeAmount = 0;
@@ -88,20 +91,6 @@ contract MockExchanges {
             revert InsufficientFlashLoanReturn();
         }
         emit FlashLoanCompleted({ token: token, borrower: msg.sender, amount: amount, feeAmount: feeAmount });
-    }
-
-    /**
-     * @dev add token to whitelist for flashloans
-     */
-    function addToWhitelist(address token) external {
-        isWhitelisted[token] = true;
-    }
-
-    /**
-     * @dev remove token from whitelist for flashloans
-     */
-    function removeFromWhitelist(address token) external {
-        isWhitelisted[token] = false;
     }
 
     /**
