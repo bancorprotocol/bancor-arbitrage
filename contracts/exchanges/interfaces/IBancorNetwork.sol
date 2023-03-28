@@ -26,6 +26,11 @@ interface IFlashLoanRecipient {
  */
 interface IBancorNetwork {
     /**
+     * @dev returns the respective pool collection for the provided pool
+     */
+    function collectionByPool(Token pool) external view returns (address);
+
+    /**
      * @dev performs a trade by providing the input source amount, sends the proceeds to the optional beneficiary (or
      * to the address of the caller, in case it's not supplied), and returns the trade target amount
      *

@@ -18,7 +18,6 @@ import { Utils } from "../utility/Utils.sol";
 import { IBancorNetwork, IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
 import { IBancorNetworkV2 } from "../exchanges/interfaces/IBancorNetworkV2.sol";
 import { ICarbonController, TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
-import { INetworkSettings } from "../interfaces/INetworkSettings.sol";
 import { PPM_RESOLUTION } from "../utility/Constants.sol";
 import { MathEx } from "../utility/MathEx.sol";
 
@@ -35,7 +34,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error InvalidInitialAndFinalTokens();
     error InvalidFlashLoanCaller();
     error MinTargetAmountTooHigh();
-    error NotWhitelisted();
+    error InvalidSourceToken();
 
     // trade args
     struct Route {
@@ -99,9 +98,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     // Carbon controller contract
     ICarbonController internal immutable _carbonController;
 
-    // Network settings contract
-    INetworkSettings internal immutable _networkSettings;
-
     // Dust wallet address
     address internal immutable _dustWallet;
 
@@ -139,8 +135,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     constructor(
         IERC20 initBnt,
         address initDustWallet,
-        Exchanges memory exchanges,
-        INetworkSettings initNetworkSettings
+        Exchanges memory exchanges
     )
         validAddress(address(initBnt))
         validAddress(address(initDustWallet))
@@ -150,7 +145,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         validAddress(address(exchanges.uniV3Router))
         validAddress(address(exchanges.sushiswapRouter))
         validAddress(address(exchanges.carbonController))
-        validAddress(address(initNetworkSettings))
     {
         _bnt = initBnt;
         _weth = IERC20(exchanges.uniV2Router.WETH());
@@ -161,7 +155,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         _uniswapV3Router = exchanges.uniV3Router;
         _sushiSwapRouter = exchanges.sushiswapRouter;
         _carbonController = exchanges.carbonController;
-        _networkSettings = initNetworkSettings;
     }
 
     /**
@@ -259,7 +252,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev execute multi-step arbitrage trade between exchanges using a flashloan from Bancor Network V3
      */
-    function execute(
+    function flashloanAndArb(
         Route[] calldata routes,
         Token token,
         uint256 sourceAmount
@@ -315,7 +308,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      * @dev execute multi-step arbitrage trade between exchanges using user funds
      * @dev must approve token before executing the function
      */
-    function arbitrage(
+    function fundAndArb(
         Route[] calldata routes,
         Token token,
         uint sourceAmount
@@ -324,9 +317,9 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         if (routes[routes.length - 1].targetToken != token) {
             revert InvalidInitialAndFinalTokens();
         }
-        // validate token is whitelisted
-        if (!token.isEqual(_bnt) && !_networkSettings.isTokenWhitelisted(token)) {
-            revert NotWhitelisted();
+        // validate token is tradeable on v3
+        if (!token.isEqual(_bnt) && _bancorNetworkV3.collectionByPool(token) == address(0)) {
+            revert InvalidSourceToken();
         }
 
         // transfer the tokens from user
