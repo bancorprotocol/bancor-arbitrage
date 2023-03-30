@@ -23,6 +23,10 @@ export const ARB_CONTRACT_ADDRESS = '0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3'
 export const DEFAULT_DECIMALS = 18;
 export const NATIVE_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
+export const PROXY_CONTRACT = 'TransparentUpgradeableProxyImmutable';
+export const INITIALIZE = 'initialize';
+export const POST_UPGRADE = 'postUpgrade';
+
 export enum TradingStatusUpdateReason {
     Default = 0,
     Admin = 1,
