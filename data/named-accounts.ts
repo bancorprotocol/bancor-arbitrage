@@ -45,6 +45,9 @@ const TokenNamedAccounts = {
     },
     wbtc: {
         ...mainnet('0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599')
+    },
+    bnt: {
+        ...mainnet('0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C')
     }
 };
 
@@ -59,6 +62,11 @@ const SushiSwapNamedAccounts = {
     sushiSwapFactory: { ...mainnet('0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac') }
 };
 
+const BancorNamedAccounts = {
+    bancorNetworkV2: { ...mainnet('0x2F9EC37d6CcFFf1caB21733BdaDEdE11c823cCB0') },
+    bancorNetworkV3: { ...mainnet('0xeEF417e1D5CC832e619ae18D2F140De2999dD4fB') }
+};
+
 export const NamedAccounts = {
     deployer: {
         ...mainnet('ledger://0x5bEBA4D3533a963Dedb270a95ae5f7752fA0Fe22'),
@@ -69,9 +77,11 @@ export const NamedAccounts = {
     foundationMultisig2: { ...mainnet('0x0c333d48Af19c2b42577f3C8f4779F0347F8C819') },
     daoMultisig: { ...mainnet('0x7e3692a6d8c34a762079fa9057aed87be7e67cb8') },
     daoPauserMultisig: { ...mainnet('0xc140c1CD2e587fC04DAa780d49b616F768476660') },
+    dustWallet: {...mainnet('0xeBcC959479634EEC5A4d7162e36f8B8cc763f491')},
 
     ...TokenNamedAccounts,
     ...TestNamedAccounts,
     ...UniswapNamedAccounts,
-    ...SushiSwapNamedAccounts
+    ...SushiSwapNamedAccounts,
+    ...BancorNamedAccounts
 };
