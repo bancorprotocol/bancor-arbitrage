@@ -860,6 +860,30 @@ contract BancorArbitrageTest is Test {
         executeArbitrageNoApproval(routes, Token(address(bnt)), 0, userFunded);
     }
 
+    function testShouldRevertETHUserArbIfNotEnoughETHSent() public {
+        BancorArbitrage.Route[] memory routes = getRoutesCustomTokens(
+            uint16(ExchangeId.BANCOR_V2),
+            NATIVE_TOKEN_ADDRESS,
+            address(arbToken2),
+            NATIVE_TOKEN_ADDRESS,
+            500
+        );
+        vm.expectRevert(BancorArbitrage.InvalidETHAmountSent.selector);
+        bancorArbitrage.fundAndArb{ value: AMOUNT - 1 }(routes, Token(NATIVE_TOKEN_ADDRESS), AMOUNT);
+    }
+
+    function testShouldRevertNonETHUserArbIfETHIsSent() public {
+        BancorArbitrage.Route[] memory routes = getRoutesCustomTokens(
+            uint16(ExchangeId.BANCOR_V2),
+            address(arbToken1),
+            address(arbToken2),
+            address(arbToken1),
+            500
+        );
+        vm.expectRevert(BancorArbitrage.InvalidETHAmountSent.selector);
+        bancorArbitrage.fundAndArb{ value: 1 }(routes, Token(address(arbToken1)), AMOUNT);
+    }
+
     function testShouldRevertArbWithUserFundsIfTokensHaventBeenApproved(uint) public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         vm.expectRevert("ERC20: insufficient allowance");

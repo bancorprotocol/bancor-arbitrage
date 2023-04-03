@@ -35,6 +35,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error InvalidFlashLoanCaller();
     error MinTargetAmountTooHigh();
     error InvalidSourceToken();
+    error InvalidETHAmountSent();
 
     // trade args
     struct Route {
@@ -320,6 +321,16 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         // validate token is tradeable on v3
         if (!token.isEqual(_bnt) && _bancorNetworkV3.collectionByPool(token) == address(0)) {
             revert InvalidSourceToken();
+        }
+        // validate ETH amount sent with function is correct
+        if (token.isNative()) {
+            if (msg.value != sourceAmount) {
+                revert InvalidETHAmountSent();
+            }
+        } else {
+            if (msg.value > 0) {
+                revert InvalidETHAmountSent();
+            }
         }
 
         // transfer the tokens from user
