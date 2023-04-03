@@ -256,7 +256,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         Route[] calldata routes,
         Token token,
         uint256 sourceAmount
-    ) external payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
+    ) external nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
         // verify that the last token in the process is the flashloan token
         if (routes[routes.length - 1].targetToken != token) {
             revert InvalidInitialAndFinalTokens();
