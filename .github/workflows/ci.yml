@@ -11,7 +11,7 @@ jobs:
   test:
     name: Test
 
-    runs-on: [self-hosted, CI]
+    runs-on: macos-latest
     timeout-minutes: 600
 
     steps:
@@ -22,12 +22,19 @@ jobs:
           access_token: ${{ github.token }}
 
       - name: Check out the repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
           node-version: '16'
+      
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -47,6 +54,14 @@ jobs:
       - name: Install dependencies
         if: steps.yarn-cache.outputs.cache-hit != 'true'
         run: yarn install --frozen-lockfile
+
+      - name: Tenderly config
+        run: |
+          mkdir ~/.tenderly
+          touch ~/.tenderly/config.yaml
+          echo "access_key: $TENDERLY_ACCESS_KEY" >> ~/.tenderly/config.yaml
+        env:
+          TENDERLY_ACCESS_KEY: ${{ secrets.TENDERLY_ACCESS_KEY }}
 
       - name: Lint
         run: yarn lint
