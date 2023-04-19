@@ -1,3 +1,4 @@
+import { MIN_BNT_BURN } from '../../utils/Constants';
 import { BancorArbitrage, ProxyAdmin } from '../../components/Contracts';
 import { DeployedContracts, describeDeployment } from '../../utils/Deploy';
 import { toPPM, toWei } from '../../utils/Types';
@@ -27,7 +28,7 @@ describeDeployment(__filename, () => {
         expect(arbRewards.maxAmount.toString()).to.equal(toWei(100).toString());
 
         const minBntBurn = await bancorArbitrage.minBurn();
-        expect(minBntBurn).to.be.eq(toWei(30));
+        expect(minBntBurn).to.be.eq(MIN_BNT_BURN);
 
         // test implementation has been initialized
         await expect(bancorArbitrageImplementation.initialize()).to.be.rejectedWith('execution reverted');

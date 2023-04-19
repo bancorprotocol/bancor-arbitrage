@@ -36,7 +36,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error MinTargetAmountTooHigh();
     error InvalidSourceToken();
     error InvalidETHAmountSent();
-    error LessThanMinBNTBurnt();
+    error InsufficientBurn();
 
     // trade args
     struct Route {
@@ -253,7 +253,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev Set min bnt burn amount
+     * @dev set min bnt burn amount
      *
      * requirements:
      *
@@ -586,7 +586,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         // check if min bnt burn amount is hit
         if (burnAmount < _minBurn) {
-            revert LessThanMinBNTBurnt();
+            revert InsufficientBurn();
         }
 
         // burn the tokens

@@ -928,7 +928,7 @@ contract BancorArbitrageTest is Test {
         if(userFunded) {
             Token(address(bnt)).safeApprove(address(bancorArbitrage), AMOUNT);
         }
-        vm.expectRevert(BancorArbitrage.LessThanMinBNTBurnt.selector);
+        vm.expectRevert(BancorArbitrage.InsufficientBurn.selector);
         vm.stopPrank();
         // execute arb
         executeArbitrageNoApproval(routes, Token(address(bnt)), AMOUNT, userFunded);

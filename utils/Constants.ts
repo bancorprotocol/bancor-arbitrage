@@ -1,4 +1,4 @@
-import { toPPM } from './Types';
+import { toPPM, toWei } from './Types';
 import Decimal from 'decimal.js';
 import { ethers } from 'ethers';
 
@@ -22,6 +22,7 @@ export const PPM_RESOLUTION = 1_000_000;
 export const ARB_CONTRACT_ADDRESS = '0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3';
 export const DEFAULT_DECIMALS = 18;
 export const NATIVE_TOKEN_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+export const MIN_BNT_BURN = toWei(30);
 
 export const PROXY_CONTRACT = 'TransparentUpgradeableProxyImmutable';
 export const INITIALIZE = 'initialize';
