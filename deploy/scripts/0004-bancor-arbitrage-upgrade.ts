@@ -1,7 +1,9 @@
 import { DeployedContracts, InstanceName, isMainnet, setDeploymentMetadata, upgradeProxy } from '../../utils/Deploy';
+import { toWei } from '../../utils/Types';
 import { DeployFunction } from 'hardhat-deploy/types';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
 import { BancorArbitrage } from '../../typechain-types';
+import { ethers } from 'hardhat';
 
 const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironment) => {
     const {
@@ -56,6 +58,12 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
             true
         );
     }
+
+    // set min BNT burn
+    const deployerSigner = await ethers.getSigner(deployer);
+    const minBntBurn = toWei(30);
+    const bancorArbitrage = await DeployedContracts.BancorArbitrage.deployed();
+    await bancorArbitrage.connect(deployerSigner).setMinBurn(minBntBurn);
 
     return true;
 };

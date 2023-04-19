@@ -26,6 +26,9 @@ describeDeployment(__filename, () => {
         expect(arbRewards.percentagePPM).to.equal(toPPM(50));
         expect(arbRewards.maxAmount.toString()).to.equal(toWei(100).toString());
 
+        const minBntBurn = await bancorArbitrage.minBurn();
+        expect(minBntBurn).to.be.eq(toWei(30));
+
         // test implementation has been initialized
         await expect(bancorArbitrageImplementation.initialize()).to.be.rejectedWith('execution reverted');
     });
