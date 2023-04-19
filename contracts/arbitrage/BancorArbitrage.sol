@@ -36,6 +36,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error MinTargetAmountTooHigh();
     error InvalidSourceToken();
     error InvalidETHAmountSent();
+    error InsufficientBurn();
 
     // trade args
     struct Route {
@@ -105,8 +106,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     // rewards defaults
     Rewards internal _rewards;
 
+    // min BNT burn for an arbitrage
+    uint256 private _minBurn;
+
     // upgrade forward-compatibility storage gap
-    uint256[MAX_GAP - 2] private __gap;
+    uint256[MAX_GAP - 3] private __gap;
 
     /**
      * @dev triggered after a successful arb is executed
@@ -129,6 +133,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         uint256 prevMaxAmount,
         uint256 newMaxAmount
     );
+
+    /**
+     * @dev triggered when the min bnt burn amount is updated
+     */
+    event MinBurnUpdated(uint256 prevAmount, uint256 newAmount);
 
     /**
      * @dev a "virtual" constructor that is only used to set immutable state variables
@@ -244,10 +253,33 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
+     * @dev set min bnt burn amount
+     *
+     * requirements:
+     *
+     * - the caller must be the admin of the contract
+     */
+    function setMinBurn(uint256 newMinBurn) external onlyAdmin {
+        uint256 currentMinBurn = _minBurn;
+        if (currentMinBurn == newMinBurn) {
+            return;
+        }
+        _minBurn = newMinBurn;
+        emit MinBurnUpdated(currentMinBurn, newMinBurn);
+    }
+
+    /**
      * @dev returns the rewards settings
      */
     function rewards() external view returns (Rewards memory) {
         return _rewards;
+    }
+
+    /**
+     * @dev returns the min bnt burn amount
+     */
+    function minBurn() external view returns (uint256) {
+        return _minBurn;
     }
 
     /**
@@ -551,6 +583,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         // calculate the burn amount
         uint256 burnAmount = totalAmount - rewardAmount;
+
+        // check if min bnt burn amount is hit
+        if (burnAmount < _minBurn) {
+            revert InsufficientBurn();
+        }
 
         // burn the tokens
         if (burnAmount > 0) {

@@ -97,6 +97,14 @@ contract BancorArbitrageTest is Test {
     );
 
     /**
+     * @dev triggered when the min bnt burn amount is updated
+     */
+    event MinBurnUpdated(
+        uint256 prevAmount,
+        uint256 newAmount
+    );
+
+    /**
      * @dev triggered when a flash-loan is completed
      */
     event FlashLoanCompleted(Token indexed token, address indexed borrower, uint256 amount, uint256 feeAmount);
@@ -304,6 +312,50 @@ contract BancorArbitrageTest is Test {
 
         rewards = bancorArbitrage.rewards();
         assertEq(rewards.percentagePPM, 40_000);
+        vm.stopPrank();
+    }
+
+    /// --- Min BNT burn tests --- ///
+
+    /**
+     * @dev test reverting when attempting to min burn from non-admin address
+     */
+    function testShouldRevertWhenSettingMinBurnFromNonAdmin() public {
+        vm.prank(users[1]);
+        vm.expectRevert(AccessDenied.selector);
+        bancorArbitrage.setMinBurn(10 ether);
+    }
+
+    /**
+     * @dev test that set min burn with same amount shouldn't emit the MinBurnUpdated event
+     */
+    function testFailShouldIgnoreSettingSameMinBurn() public {
+        vm.startPrank(admin);
+        // this assertion will fail
+        vm.expectEmit(false, false, false, false);
+        emit MinBurnUpdated(0, 0);
+        bancorArbitrage.setMinBurn(0);
+        vm.stopPrank();
+    }
+
+    /**
+     * @dev test that admin should be able to set min bnt burn
+     */
+    function testAdminShouldBeAbleToSetMinBurn() public {
+        vm.startPrank(admin);
+        // check the initial min burn amount is 0
+        uint256 currentBurn = bancorArbitrage.minBurn();
+        assertEq(currentBurn, 0);
+
+        // expect that event is emitted with the correct amount change
+        uint256 newBurnAmount = 30 ether;
+        vm.expectEmit(true, true, true, true);
+        emit MinBurnUpdated(0, newBurnAmount);
+        bancorArbitrage.setMinBurn(newBurnAmount);
+
+        // assert that the new burn amount is correct
+        uint256 minBurn = bancorArbitrage.minBurn();
+        assertEq(minBurn, newBurnAmount);
         vm.stopPrank();
     }
 
@@ -858,6 +910,28 @@ contract BancorArbitrageTest is Test {
         BancorArbitrage.Route[] memory routes = getRoutes();
         vm.expectRevert(ZeroValue.selector);
         executeArbitrageNoApproval(routes, Token(address(bnt)), 0, userFunded);
+    }
+
+    /**
+     * @dev test that arb attempt which burns amount below the min burn amount should revert
+     */
+    function testShouldRevertArbIfBelowMinBurnAmount(bool userFunded) public {
+        BancorArbitrage.Route[] memory routes = getRoutes();
+        // set min bnt burn to 30 BNT
+        vm.prank(admin);
+        bancorArbitrage.setMinBurn(30 ether);
+        
+        // set swap profit from mock exchanges to 10
+        exchanges.setProfitAndOutputAmount(true, 10 ether);
+
+        vm.startPrank(user1);
+        if(userFunded) {
+            Token(address(bnt)).safeApprove(address(bancorArbitrage), AMOUNT);
+        }
+        vm.expectRevert(BancorArbitrage.InsufficientBurn.selector);
+        vm.stopPrank();
+        // execute arb
+        executeArbitrageNoApproval(routes, Token(address(bnt)), AMOUNT, userFunded);
     }
 
     function testShouldRevertETHUserArbIfNotEnoughETHSent() public {

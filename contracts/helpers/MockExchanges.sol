@@ -24,10 +24,10 @@ contract MockExchanges {
     address private immutable _bnt;
 
     // what amount is added or subtracted to/from the input amount on swap
-    uint private immutable _outputAmount;
+    uint private _outputAmount;
 
     // true if the gain amount is added to the swap input, false if subtracted
-    bool private immutable _profit;
+    bool private _profit;
 
     // mapping for flashloan-whitelisted tokens
     mapping(address => bool) public isWhitelisted;
@@ -92,6 +92,14 @@ contract MockExchanges {
             revert InsufficientFlashLoanReturn();
         }
         emit FlashLoanCompleted({ token: token, borrower: msg.sender, amount: amount, feeAmount: feeAmount });
+    }
+
+    /**
+     * @dev set profit and output amount
+     */
+    function setProfitAndOutputAmount(bool profit, uint256 outputAmount) external {
+        _profit = profit;
+        _outputAmount = outputAmount;
     }
 
     /**
