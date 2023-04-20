@@ -4,9 +4,9 @@ import '@nomiclabs/hardhat-etherscan';
 import '@tenderly/hardhat-tenderly';
 import '@typechain/hardhat';
 import 'hardhat-deploy';
-import 'hardhat-dependency-compiler'
+import 'hardhat-dependency-compiler';
 import 'dotenv/config';
-import 'solidity-coverage';;
+import 'solidity-coverage';
 import '@nomicfoundation/hardhat-chai-matchers';
 import { DeploymentNetwork } from './utils/Constants';
 import { NamedAccounts } from './data/named-accounts';
@@ -103,12 +103,8 @@ const config: HardhatUserConfig = {
             }
         ],
         deployments: {
-            [DeploymentNetwork.Mainnet]: [
-                `deployments/${DeploymentNetwork.Mainnet}`,
-            ],
-            [DeploymentNetwork.Tenderly]: [
-                `deployments/${DeploymentNetwork.Tenderly}`,
-            ]
+            [DeploymentNetwork.Mainnet]: [`deployments/${DeploymentNetwork.Mainnet}`],
+            [DeploymentNetwork.Tenderly]: [`deployments/${DeploymentNetwork.Tenderly}`]
         }
     },
     verify: {
@@ -118,7 +114,7 @@ const config: HardhatUserConfig = {
     },
     etherscan: {
         apiKey: ETHERSCAN_API_KEY
-    },
+    }
 };
 
 export default config;

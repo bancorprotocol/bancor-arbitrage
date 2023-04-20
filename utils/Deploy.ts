@@ -1,12 +1,7 @@
 import { ArtifactData } from '../components/ContractBuilder';
-import {
-    BancorArbitrage,
-    IVersioned,
-    MockExchanges,
-    ProxyAdmin
-} from '../components/Contracts';
+import { BancorArbitrage, IVersioned, MockExchanges, ProxyAdmin } from '../components/Contracts';
 import Logger from './Logger';
-import { DeploymentNetwork, ZERO_BYTES, PROXY_CONTRACT, INITIALIZE, POST_UPGRADE  } from './Constants';
+import { DeploymentNetwork, ZERO_BYTES, PROXY_CONTRACT, INITIALIZE, POST_UPGRADE } from './Constants';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 import { BigNumber, Contract, ContractInterface, ContractTransaction, utils } from 'ethers';
 import fs from 'fs';
@@ -117,7 +112,7 @@ const deployed = <F extends Contract>(name: InstanceName) => ({
 const DeployedNewContracts = {
     BancorArbitrage: deployed<BancorArbitrage>(InstanceName.BancorArbitrage),
     MockExchanges: deployed<MockExchanges>(InstanceName.MockExchanges),
-    ProxyAdmin: deployed<ProxyAdmin>(InstanceName.ProxyAdmin),
+    ProxyAdmin: deployed<ProxyAdmin>(InstanceName.ProxyAdmin)
 };
 
 export const DeployedContracts = {
@@ -415,8 +410,8 @@ export const upgradeProxy = async (options: UpgradeProxyOptions, initImpl = fals
         log: true
     });
 
-    if(initImpl) {
-        if(!res.implementation) {
+    if (initImpl) {
+        if (!res.implementation) {
             throw new Error(`Implementation address for ${contractName} missing`);
         }
         await initializeImplementation({
@@ -508,19 +503,16 @@ interface InitializeImplementationOptions {
 }
 
 export const initializeImplementation = async (options: InitializeImplementationOptions) => {
-    const { name, address, args, from } = options;
-    const signer = await ethers.getSigner(from);
-    const contract: Contract = await ethers.getContractAt(name, address, signer);
+    const { name, args, from } = options;
 
     Logger.log(`  initializing implementation of ${name}`);
 
-    let tx: ContractTransaction;
-    if(!args) {
-        tx = await contract[INITIALIZE]();
-    } else {
-        tx = await contract[INITIALIZE](...args);
-    }
-    await tx.wait();
+    await execute({
+        name: (name + '_Implementation') as InstanceName,
+        methodName: INITIALIZE,
+        args: args ? args : [],
+        from
+    });
 };
 
 interface Deployment {
@@ -677,7 +669,6 @@ export const getInstanceNameByAddress = (address: string): InstanceName => {
 
     throw new Error(`Unable to find deployment for ${address}`);
 };
-
 
 export const describeDeployment = (
     filename: string,

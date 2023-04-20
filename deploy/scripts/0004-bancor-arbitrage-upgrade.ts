@@ -1,4 +1,11 @@
-import { DeployedContracts, InstanceName, isMainnet, setDeploymentMetadata, upgradeProxy } from '../../utils/Deploy';
+import {
+    DeployedContracts,
+    InstanceName,
+    execute,
+    isMainnet,
+    setDeploymentMetadata,
+    upgradeProxy
+} from '../../utils/Deploy';
 import { MIN_BNT_BURN } from '../../utils/Constants';
 import { DeployFunction } from 'hardhat-deploy/types';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
@@ -14,7 +21,8 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
         bnt,
         dustWallet,
         bancorNetworkV2,
-        bancorNetworkV3
+        bancorNetworkV3,
+        carbonController
     } = await getNamedAccounts();
 
     const exchanges: BancorArbitrage.ExchangesStruct = {
@@ -23,7 +31,7 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
         uniV2Router: uniswapV2Router02,
         uniV3Router: uniswapV3Router,
         sushiswapRouter: sushiSwapRouter,
-        carbonController: bancorNetworkV3
+        carbonController
     };
 
     if (isMainnet()) {
@@ -60,10 +68,12 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
     }
 
     // set min BNT burn
-    const deployerSigner = await ethers.getSigner(deployer);
-    const minBntBurn = MIN_BNT_BURN;
-    const bancorArbitrage = await DeployedContracts.BancorArbitrage.deployed();
-    await bancorArbitrage.connect(deployerSigner).setMinBurn(minBntBurn);
+    await execute({
+        name: InstanceName.BancorArbitrage,
+        methodName: 'setMinBurn',
+        args: [MIN_BNT_BURN],
+        from: deployer
+    });
 
     return true;
 };

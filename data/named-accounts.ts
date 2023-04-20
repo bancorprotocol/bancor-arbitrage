@@ -64,7 +64,8 @@ const SushiSwapNamedAccounts = {
 
 const BancorNamedAccounts = {
     bancorNetworkV2: { ...mainnet('0x2F9EC37d6CcFFf1caB21733BdaDEdE11c823cCB0') },
-    bancorNetworkV3: { ...mainnet('0xeEF417e1D5CC832e619ae18D2F140De2999dD4fB') }
+    bancorNetworkV3: { ...mainnet('0xeEF417e1D5CC832e619ae18D2F140De2999dD4fB') },
+    carbonController: { ...mainnet('0xC537e898CD774e2dCBa3B14Ea6f34C93d5eA45e1') }
 };
 
 export const NamedAccounts = {
@@ -77,7 +78,7 @@ export const NamedAccounts = {
     foundationMultisig2: { ...mainnet('0x0c333d48Af19c2b42577f3C8f4779F0347F8C819') },
     daoMultisig: { ...mainnet('0x7e3692a6d8c34a762079fa9057aed87be7e67cb8') },
     daoPauserMultisig: { ...mainnet('0xc140c1CD2e587fC04DAa780d49b616F768476660') },
-    dustWallet: {...mainnet('0xeBcC959479634EEC5A4d7162e36f8B8cc763f491')},
+    dustWallet: { ...mainnet('0xeBcC959479634EEC5A4d7162e36f8B8cc763f491') },
 
     ...TokenNamedAccounts,
     ...TestNamedAccounts,
