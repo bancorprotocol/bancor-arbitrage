@@ -3,7 +3,7 @@ import { BancorArbitrage, IVersioned, MockExchanges, ProxyAdmin } from '../compo
 import Logger from './Logger';
 import { DeploymentNetwork, ZERO_BYTES, PROXY_CONTRACT, INITIALIZE, POST_UPGRADE } from './Constants';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
-import { BigNumber, Contract, ContractInterface, ContractTransaction, utils } from 'ethers';
+import { BigNumber, Contract, ContractInterface, utils } from 'ethers';
 import fs from 'fs';
 import glob from 'glob';
 import { config, deployments, ethers, getNamedAccounts, tenderly } from 'hardhat';
@@ -510,7 +510,7 @@ export const initializeImplementation = async (options: InitializeImplementation
     await execute({
         name: (name + '_Implementation') as InstanceName,
         methodName: INITIALIZE,
-        args: args ? args : [],
+        args: args ?? [],
         from
     });
 };
@@ -657,7 +657,7 @@ export const getInstanceNameByAddress = (address: string): InstanceName => {
     const deploymentPaths = glob.sync(`${deploymentsPath}/**/*.json`);
     for (const deploymentPath of deploymentPaths) {
         const name = path.basename(deploymentPath).split('.')[0];
-        if (name.endsWith('_Implementation') || name.endsWith('_Proxy')) {
+        if (name.endsWith('_Proxy')) {
             continue;
         }
 
