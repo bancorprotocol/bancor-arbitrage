@@ -3,7 +3,7 @@ import { BancorArbitrage, IVersioned, MockExchanges, ProxyAdmin } from '../compo
 import Logger from './Logger';
 import { DeploymentNetwork, ZERO_BYTES, PROXY_CONTRACT, INITIALIZE, POST_UPGRADE } from './Constants';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
-import { BigNumber, Contract, ContractInterface, utils } from 'ethers';
+import { BigNumber, Contract, ContractInterface, ContractTransaction, utils } from 'ethers';
 import fs from 'fs';
 import glob from 'glob';
 import { config, deployments, ethers, getNamedAccounts, tenderly } from 'hardhat';
@@ -503,12 +503,14 @@ interface InitializeImplementationOptions {
 }
 
 export const initializeImplementation = async (options: InitializeImplementationOptions) => {
-    const { name, args, from } = options;
+    const { name, address, args, from } = options;
+
+    const instanceName: InstanceName = getInstanceNameByAddress(address); 
 
     Logger.log(`  initializing implementation of ${name}`);
 
     await execute({
-        name: (name + '_Implementation') as InstanceName,
+        name: instanceName,
         methodName: INITIALIZE,
         args: args ?? [],
         from
