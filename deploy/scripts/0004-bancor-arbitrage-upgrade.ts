@@ -10,7 +10,6 @@ import { MIN_BNT_BURN } from '../../utils/Constants';
 import { DeployFunction } from 'hardhat-deploy/types';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
 import { BancorArbitrage } from '../../typechain-types';
-import { ethers } from 'hardhat';
 
 const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironment) => {
     const {
