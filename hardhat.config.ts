@@ -7,6 +7,7 @@ import 'hardhat-deploy';
 import 'hardhat-dependency-compiler';
 import 'dotenv/config';
 import 'solidity-coverage';
+import 'hardhat-storage-layout';
 import '@nomicfoundation/hardhat-chai-matchers';
 import { DeploymentNetwork } from './utils/Constants';
 import { NamedAccounts } from './data/named-accounts';
