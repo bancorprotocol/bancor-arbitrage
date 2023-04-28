@@ -610,7 +610,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         address[] memory path = new address[](routes.length + 1);
         path[0] = address(token);
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
-            path[i + 1] = address(routes[i].targetToken);
+            path[uncheckedInc(i)] = address(routes[i].targetToken);
         }
 
         emit ArbitrageExecuted(caller, exchangeIds, path, sourceAmount, burnAmount, rewardAmount);
