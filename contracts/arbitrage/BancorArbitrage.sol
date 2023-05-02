@@ -602,14 +602,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         // build the list of exchange ids
         uint16[] memory exchangeIds = new uint16[](routes.length);
-        for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
-            exchangeIds[i] = routes[i].exchangeId;
-        }
-
-        // build the token path
         address[] memory path = new address[](routes.length + 1);
         path[0] = address(token);
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
+            exchangeIds[i] = routes[i].exchangeId;
             path[uncheckedInc(i)] = address(routes[i].targetToken);
         }
 
