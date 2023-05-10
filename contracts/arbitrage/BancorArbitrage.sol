@@ -86,6 +86,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     uint16 public constant EXCHANGE_ID_SUSHISWAP = 5;
     uint16 public constant EXCHANGE_ID_CARBON = 6;
 
+    // minimum number of trade routes supported
+    uint256 private constant MIN_ROUTE_LENGTH = 2;
     // maximum number of trade routes supported
     uint256 private constant MAX_ROUTE_LENGTH = 10;
 
@@ -232,7 +234,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      * @dev validRouteLength logic for gas optimization
      */
     function _validRouteLength(uint256 length) internal pure {
-        if (length == 0 || length > MAX_ROUTE_LENGTH) {
+        if (length < MIN_ROUTE_LENGTH || length > MAX_ROUTE_LENGTH) {
             revert InvalidRouteLength();
         }
     }
@@ -366,7 +368,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // perform the arbitrage
-        BancorArbitrage.RouteV2[] memory routes = abi.decode(data, (BancorArbitrage.RouteV2[]));
+        RouteV2[] memory routes = abi.decode(data, (RouteV2[]));
         _arbitrageV2(routes);
 
         // return the flashloan
