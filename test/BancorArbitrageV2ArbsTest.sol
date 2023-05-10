@@ -215,7 +215,7 @@ contract BancorArbitrageV2ArbsTest is Test {
             uint expectedBntBurn = totalRewards - expectedUserReward;
 
             uint16[] memory exchangeIds = new uint16[](3);
-            address[] memory tokenPath = new address[](4);
+            address[] memory tokenPath = new address[](6);
 
             exchangeIds[0] = uint16(ExchangeId.BANCOR_V2);
             exchangeIds[1] = uint16(ExchangeId.BANCOR_V2);
@@ -223,8 +223,10 @@ contract BancorArbitrageV2ArbsTest is Test {
 
             tokenPath[0] = tokens[i];
             tokenPath[1] = tokens[(i + 1) % 4];
-            tokenPath[2] = tokens[(i + 2) % 4];
-            tokenPath[3] = tokens[i];
+            tokenPath[2] = tokens[(i + 1) % 4];
+            tokenPath[3] = tokens[(i + 2) % 4];
+            tokenPath[4] = tokens[(i + 2) % 4];
+            tokenPath[5] = tokens[i];
 
             vm.startPrank(user1);
             // approve token if user-funded arb
@@ -277,7 +279,7 @@ contract BancorArbitrageV2ArbsTest is Test {
             uint expectedBntBurn = totalRewards - expectedUserReward;
 
             uint16[] memory exchangeIds = new uint16[](3);
-            address[] memory tokenPath = new address[](4);
+            address[] memory tokenPath = new address[](6);
 
             exchangeIds[0] = uint16(ExchangeId.BANCOR_V2);
             exchangeIds[1] = uint16(ExchangeId.BANCOR_V2);
@@ -285,8 +287,10 @@ contract BancorArbitrageV2ArbsTest is Test {
 
             tokenPath[0] = tokens[i];
             tokenPath[1] = tokens[(i + 1) % 4];
-            tokenPath[2] = tokens[(i + 2) % 4];
-            tokenPath[3] = tokens[i];
+            tokenPath[2] = tokens[(i + 1) % 4];
+            tokenPath[3] = tokens[(i + 2) % 4];
+            tokenPath[4] = tokens[(i + 2) % 4];
+            tokenPath[5] = tokens[i];
 
             vm.startPrank(user1);
             // approve token if user-funded arb
@@ -518,7 +522,7 @@ contract BancorArbitrageV2ArbsTest is Test {
         bnt.approve(address(bancorArbitrage), AMOUNT);
         vm.expectEmit(false, false, false, false);
         emit ArbitrageExecuted(admin, exchangeIds, tradePath, AMOUNT, 0, 0);
-        bancorArbitrage.fundAndArbV2(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.fundAndArb(routes, Token(address(bnt)), AMOUNT);
         vm.stopPrank();
     }
 
@@ -864,7 +868,7 @@ contract BancorArbitrageV2ArbsTest is Test {
             500
         );
         vm.expectRevert(BancorArbitrage.InvalidETHAmountSent.selector);
-        bancorArbitrage.fundAndArbV2{ value: AMOUNT - 1 }(routes, Token(NATIVE_TOKEN_ADDRESS), AMOUNT);
+        bancorArbitrage.fundAndArb{ value: AMOUNT - 1 }(routes, Token(NATIVE_TOKEN_ADDRESS), AMOUNT);
     }
 
     function testShouldRevertNonETHUserArbIfETHIsSent() public {
@@ -877,13 +881,13 @@ contract BancorArbitrageV2ArbsTest is Test {
             500
         );
         vm.expectRevert(BancorArbitrage.InvalidETHAmountSent.selector);
-        bancorArbitrage.fundAndArbV2{ value: 1 }(routes, Token(address(arbToken1)), AMOUNT);
+        bancorArbitrage.fundAndArb{ value: 1 }(routes, Token(address(arbToken1)), AMOUNT);
     }
 
     function testShouldRevertArbWithUserFundsIfTokensHaventBeenApproved(uint) public {
         BancorArbitrage.RouteV2[] memory routes = getRoutes();
         vm.expectRevert("ERC20: insufficient allowance");
-        bancorArbitrage.fundAndArbV2(routes, Token(address(bnt)), AMOUNT);
+        bancorArbitrage.fundAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 
     /**
@@ -1194,7 +1198,7 @@ contract BancorArbitrageV2ArbsTest is Test {
         if (userFunded) {
             token.safeIncreaseAllowance(address(bancorArbitrage), sourceAmount);
             uint val = token.isNative() ? sourceAmount : 0;
-            bancorArbitrage.fundAndArbV2{ value: val }(routes, token, sourceAmount);
+            bancorArbitrage.fundAndArb{ value: val }(routes, token, sourceAmount);
         } else {
             bancorArbitrage.flashloanAndArbV2(routes, token, sourceAmount);
         }
@@ -1214,7 +1218,7 @@ contract BancorArbitrageV2ArbsTest is Test {
         vm.startPrank(user1);
         if (userFunded) {
             uint val = token.isNative() ? sourceAmount : 0;
-            bancorArbitrage.fundAndArbV2{ value: val }(routes, token, sourceAmount);
+            bancorArbitrage.fundAndArb{ value: val }(routes, token, sourceAmount);
         } else {
             bancorArbitrage.flashloanAndArbV2(routes, token, sourceAmount);
         }

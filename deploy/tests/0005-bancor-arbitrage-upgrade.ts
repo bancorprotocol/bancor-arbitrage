@@ -1,4 +1,3 @@
-import { MIN_BNT_BURN } from '../../utils/Constants';
 import { BancorArbitrage, ProxyAdmin } from '../../components/Contracts';
 import { DeployedContracts, describeDeployment } from '../../utils/Deploy';
 import { toPPM, toWei } from '../../utils/Types';

@@ -24,10 +24,10 @@ contract MockExchanges {
     address private immutable _bnt;
 
     // what amount is added or subtracted to/from the input amount on swap
-    uint public outputAmount;
+    uint private _outputAmount;
 
     // true if the gain amount is added to the swap input, false if subtracted
-    bool public profit;
+    bool private _profit;
 
     // mapping for flashloan-whitelisted tokens
     mapping(address => bool) public isWhitelisted;
@@ -44,11 +44,11 @@ contract MockExchanges {
      */
     event FlashLoanCompleted(Token indexed token, address indexed borrower, uint256 amount, uint256 feeAmount);
 
-    constructor(IERC20 weth, address bnt, uint _outputAmount, bool _profit) {
+    constructor(IERC20 weth, address bnt, uint initOutputAmount, bool initProfit) {
         _weth = weth;
         _bnt = bnt;
-        outputAmount = _outputAmount;
-        profit = _profit;
+        _outputAmount = initOutputAmount;
+        _profit = initProfit;
     }
 
     receive() external payable {}
@@ -56,6 +56,14 @@ contract MockExchanges {
     //solhint-disable-next-line func-name-mixedcase
     function WETH() external view returns (IERC20) {
         return _weth;
+    }
+
+    function outputAmount() external view returns (uint) {
+        return _outputAmount;
+    }
+
+    function profit() external view returns (bool) {
+        return _profit;
     }
 
     /**
@@ -79,9 +87,9 @@ contract MockExchanges {
         // decode data to count the swaps
         BancorArbitrage.RouteV2[] memory routes = abi.decode(data, (BancorArbitrage.RouteV2[]));
         uint swapCount = address(token) == _bnt ? routes.length : routes.length + 1;
-        uint gain = swapCount * outputAmount;
+        uint gain = swapCount * _outputAmount;
         uint expectedBalance;
-        if (profit) {
+        if (_profit) {
             expectedBalance = prevBalance - gain;
         } else {
             expectedBalance = prevBalance + gain;
@@ -96,9 +104,9 @@ contract MockExchanges {
     /**
      * @dev set profit and output amount
      */
-    function setProfitAndOutputAmount(bool _profit, uint256 _outputAmount) external {
-        profit = _profit;
-        outputAmount = _outputAmount;
+    function setProfitAndOutputAmount(bool newProfit, uint256 newOutputAmount) external {
+        _profit = newProfit;
+        _outputAmount = newOutputAmount;
     }
 
     /**
@@ -267,10 +275,10 @@ contract MockExchanges {
         // transfer target amount
         // receive outputAmount tokens per swap
         uint targetAmount;
-        if (profit) {
-            targetAmount = amount + outputAmount;
+        if (_profit) {
+            targetAmount = amount + _outputAmount;
         } else {
-            targetAmount = amount - outputAmount;
+            targetAmount = amount - _outputAmount;
         }
         require(targetAmount >= minTargetAmount, "InsufficientTargetAmount");
         targetToken.safeTransfer(trader, targetAmount);
