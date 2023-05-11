@@ -49,6 +49,19 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         bytes customData;
     }
 
+    // trade args v2
+    struct RouteV2 {
+        uint16 exchangeId;
+        Token sourceToken;
+        Token targetToken;
+        uint256 sourceAmount;
+        uint256 minTargetAmount;
+        uint256 deadline;
+        address customAddress;
+        uint256 customInt;
+        bytes customData;
+    }
+
     // rewards settings
     struct Rewards {
         uint32 percentagePPM;
@@ -73,6 +86,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     uint16 public constant EXCHANGE_ID_SUSHISWAP = 5;
     uint16 public constant EXCHANGE_ID_CARBON = 6;
 
+    // minimum number of trade routes supported
+    uint256 private constant MIN_ROUTE_LENGTH = 2;
     // maximum number of trade routes supported
     uint256 private constant MAX_ROUTE_LENGTH = 10;
 
@@ -202,15 +217,15 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      * @inheritdoc Upgradeable
      */
     function version() public pure override(Upgradeable) returns (uint16) {
-        return 3;
+        return 4;
     }
 
     /**
      * @dev checks whether the specified number of routes is supported
      */
-    modifier validRouteLength(Route[] calldata routes) {
+    modifier validRouteLength(uint256 length) {
         // validate inputs
-        _validRouteLength(routes);
+        _validRouteLength(length);
 
         _;
     }
@@ -218,8 +233,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev validRouteLength logic for gas optimization
      */
-    function _validRouteLength(Route[] calldata routes) internal pure {
-        if (routes.length == 0 || routes.length > MAX_ROUTE_LENGTH) {
+    function _validRouteLength(uint256 length) internal pure {
+        if (length < MIN_ROUTE_LENGTH || length > MAX_ROUTE_LENGTH) {
             revert InvalidRouteLength();
         }
     }
@@ -284,24 +299,30 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
     /**
      * @dev execute multi-step arbitrage trade between exchanges using a flashloan from Bancor Network V3
+     * note: deprecated
      */
-    function flashloanAndArb(
-        Route[] calldata routes,
+    function flashloanAndArb(Route[] calldata routes, Token token, uint256 sourceAmount) external {
+        // convert route array to new format
+        RouteV2[] memory routesV2 = _convertRouteV1toV2(routes, token, sourceAmount);
+        // perform arb
+        flashloanAndArbV2(routesV2, token, sourceAmount);
+    }
+
+    /**
+     * @dev execute multi-step arbitrage trade between exchanges using a flashloan from Bancor Network V3
+     */
+    function flashloanAndArbV2(
+        RouteV2[] memory routes,
         Token token,
         uint256 sourceAmount
-    ) external nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
+    ) public nonReentrant validRouteLength(routes.length) greaterThanZero(sourceAmount) {
         // verify that the last token in the process is the flashloan token
         if (routes[routes.length - 1].targetToken != token) {
             revert InvalidInitialAndFinalTokens();
         }
 
         // take a flashloan for the source amount on Bancor v3 and perform the trades
-        _bancorNetworkV3.flashLoan(
-            token,
-            sourceAmount,
-            IFlashLoanRecipient(address(this)),
-            abi.encode(routes, sourceAmount)
-        );
+        _bancorNetworkV3.flashLoan(token, sourceAmount, IFlashLoanRecipient(address(this)), abi.encode(routes));
 
         // if flashloan token is not BNT, trade leftover tokens for BNT on Bancor Network V3
         if (!token.isEqual(_bnt)) {
@@ -310,7 +331,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // allocate the rewards
-        _allocateRewards(routes, token, sourceAmount, msg.sender);
+        _allocateRewards(routes, sourceAmount, msg.sender);
     }
 
     /**
@@ -330,8 +351,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // perform the arbitrage
-        (Route[] memory routes, uint256 sourceAmount) = abi.decode(data, (Route[], uint256));
-        _arbitrage(routes, Token(address(erc20Token)), sourceAmount);
+        RouteV2[] memory routes = abi.decode(data, (RouteV2[]));
+        _arbitrageV2(routes);
 
         // return the flashloan
         Token(address(erc20Token)).safeTransfer(msg.sender, amount + feeAmount);
@@ -342,12 +363,43 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      * @dev must approve token before executing the function
      */
     function fundAndArb(
-        Route[] calldata routes,
+        RouteV2[] calldata routes,
         Token token,
-        uint sourceAmount
-    ) external payable nonReentrant validRouteLength(routes) greaterThanZero(sourceAmount) {
+        uint256 sourceAmount
+    ) external payable nonReentrant validRouteLength(routes.length) greaterThanZero(sourceAmount) {
+        // perform validations
+        _validateFundAndArbParams(token, routes[routes.length - 1].targetToken, sourceAmount, msg.value);
+
+        // transfer the tokens from user
+        token.safeTransferFrom(msg.sender, address(this), sourceAmount);
+
+        // perform the arbitrage
+        _arbitrageV2(routes);
+
+        // return the tokens to the user
+        token.safeTransfer(msg.sender, sourceAmount);
+
+        // if initial token is not BNT, trade leftover tokens for BNT on Bancor Network V3
+        if (!token.isEqual(_bnt)) {
+            uint256 leftover = token.balanceOf(address(this));
+            _trade(EXCHANGE_ID_BANCOR_V3, token, Token(address(_bnt)), leftover, 1, block.timestamp, address(0), 0, "");
+        }
+
+        // allocate the rewards
+        _allocateRewards(routes, sourceAmount, msg.sender);
+    }
+
+    /**
+     * @dev perform validations for fundAndArb functions
+     */
+    function _validateFundAndArbParams(
+        Token token,
+        Token finalToken,
+        uint256 sourceAmount,
+        uint256 value
+    ) private view {
         // verify that the last token in the process is the arb token
-        if (routes[routes.length - 1].targetToken != token) {
+        if (finalToken != token) {
             revert InvalidInitialAndFinalTokens();
         }
         // validate token is tradeable on v3
@@ -356,48 +408,35 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
         // validate ETH amount sent with function is correct
         if (token.isNative()) {
-            if (msg.value != sourceAmount) {
+            if (value != sourceAmount) {
                 revert InvalidETHAmountSent();
             }
         } else {
-            if (msg.value > 0) {
+            if (value > 0) {
                 revert InvalidETHAmountSent();
             }
         }
-
-        // transfer the tokens from user
-        token.safeTransferFrom(msg.sender, address(this), sourceAmount);
-
-        // perform the arbitrage
-        _arbitrage(routes, token, sourceAmount);
-
-        // return the tokens to the user
-        token.safeTransfer(msg.sender, sourceAmount);
-
-        // if initial token is not BNT, trade leftover tokens for BNT on Bancor Network V3
-        if (!token.isEqual(_bnt)) {
-            uint leftover = token.balanceOf(address(this));
-            _trade(EXCHANGE_ID_BANCOR_V3, token, Token(address(_bnt)), leftover, 1, block.timestamp, address(0), 0, "");
-        }
-
-        // allocate the rewards
-        _allocateRewards(routes, token, sourceAmount, msg.sender);
     }
 
     /**
      * @dev arbitrage logic
      */
-    function _arbitrage(Route[] memory routes, Token sourceToken, uint256 sourceAmount) private {
+    function _arbitrageV2(RouteV2[] memory routes) private {
         // perform the trade routes
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
-            Route memory route = routes[i];
-            // save the current balance
-            uint256 previousBalance = route.targetToken.balanceOf(address(this));
+            RouteV2 memory route = routes[i];
+            uint256 sourceTokenBalance = route.sourceToken.balanceOf(address(this));
+            uint256 sourceAmount;
+            if (route.sourceAmount == 0 || route.sourceAmount > sourceTokenBalance) {
+                sourceAmount = sourceTokenBalance;
+            } else {
+                sourceAmount = route.sourceAmount;
+            }
 
             // perform the trade
             _trade(
                 route.exchangeId,
-                sourceToken,
+                route.sourceToken,
                 route.targetToken,
                 sourceAmount,
                 route.minTargetAmount,
@@ -406,12 +445,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
                 route.customInt,
                 route.customData
             );
-
-            // the current iteration target token is the source token in the next iteration
-            sourceToken = route.targetToken;
-
-            // the resulting trade amount is the source amount in the next iteration
-            sourceAmount = route.targetToken.balanceOf(address(this)) - previousBalance;
         }
     }
 
@@ -570,7 +603,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev allocates the rewards to the caller and burns the rest
      */
-    function _allocateRewards(Route[] calldata routes, Token token, uint256 sourceAmount, address caller) internal {
+    function _allocateRewards(RouteV2[] memory routes, uint256 sourceAmount, address caller) internal {
         // get the total amount
         uint256 totalAmount = _bnt.balanceOf(address(this));
 
@@ -600,16 +633,57 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             _bnt.safeTransfer(caller, rewardAmount);
         }
 
-        // build the list of exchange ids
-        uint16[] memory exchangeIds = new uint16[](routes.length);
-        address[] memory path = new address[](routes.length + 1);
-        path[0] = address(token);
+        (uint16[] memory exchangeIds, address[] memory path) = _buildArbPath(routes);
+        emit ArbitrageExecuted(caller, exchangeIds, path, sourceAmount, burnAmount, rewardAmount);
+    }
+
+    /**
+     * @dev build arb path from RouteV2 array
+     */
+    function _buildArbPath(
+        RouteV2[] memory routes
+    ) private pure returns (uint16[] memory exchangeIds, address[] memory path) {
+        exchangeIds = new uint16[](routes.length);
+        path = new address[](routes.length * 2);
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
             exchangeIds[i] = routes[i].exchangeId;
-            path[uncheckedInc(i)] = address(routes[i].targetToken);
+            path[i * 2] = address(routes[i].sourceToken);
+            path[uncheckedInc(i * 2)] = address(routes[i].targetToken);
         }
+    }
 
-        emit ArbitrageExecuted(caller, exchangeIds, path, sourceAmount, burnAmount, rewardAmount);
+    /**
+     * @dev convert a V1 Route array to V2
+     */
+    function _convertRouteV1toV2(
+        Route[] calldata routes,
+        Token sourceToken,
+        uint256 sourceAmount
+    ) private pure returns (RouteV2[] memory routesV2) {
+        routesV2 = new RouteV2[](routes.length);
+        if (routes.length == 0) {
+            return routesV2;
+        }
+        routesV2[0].sourceToken = sourceToken;
+        routesV2[0].sourceAmount = sourceAmount;
+        // set each route details
+        for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
+            Route memory route = routes[i];
+            RouteV2 memory routeV2 = routesV2[i];
+            // copy mutual parts
+            routeV2.exchangeId = route.exchangeId;
+            routeV2.targetToken = route.targetToken;
+            routeV2.minTargetAmount = route.minTargetAmount;
+            routeV2.deadline = route.deadline;
+            routeV2.customAddress = route.customAddress;
+            routeV2.customInt = route.customInt;
+            routeV2.customData = route.customData;
+            // set source token and amount
+            if (i != 0) {
+                routeV2.sourceToken = routes[i - 1].targetToken;
+                routeV2.sourceAmount = 0;
+            }
+        }
     }
 
     /**
