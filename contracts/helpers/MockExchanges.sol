@@ -10,6 +10,8 @@ import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
+import { IFlashLoanRecipient as BalancerFlashloanRecipient } from "../exchanges/interfaces/IVault.sol";
+
 import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 
 contract MockExchanges {
@@ -85,7 +87,10 @@ contract MockExchanges {
 
         // account for net gain in the token which is sent from this contract
         // decode data to count the swaps
-        BancorArbitrage.RouteV2[] memory routes = abi.decode(data, (BancorArbitrage.RouteV2[]));
+        (, , BancorArbitrage.RouteV2[] memory routes) = abi.decode(
+            data,
+            (uint256, BancorArbitrage.Flashloan[], BancorArbitrage.RouteV2[])
+        );
         uint swapCount = address(token) == _bnt ? routes.length : routes.length + 1;
         uint gain = swapCount * _outputAmount;
         uint expectedBalance;
