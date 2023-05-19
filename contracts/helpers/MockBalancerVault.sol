@@ -26,30 +26,30 @@ contract MockBalancerVault {
     event FlashLoan(IFlashLoanRecipient indexed recipient, IERC20 indexed token, uint256 amount, uint256 feeAmount);
 
     receive() external payable {}
-    
+
     /**
      * @dev Handles Flash Loans through the Vault. Calls the `receiveFlashLoan` hook on the flash loan recipient
      * contract, which implements the `IFlashLoanRecipient` interface.
-    */
+     */
     function flashLoan(
         IFlashLoanRecipient recipient,
         IERC20[] memory tokens,
         uint256[] memory amounts,
         bytes memory userData
     ) external {
-        if(tokens.length != amounts.length) {
+        if (tokens.length != amounts.length) {
             revert InputLengthMismatch();
         }
         uint[] memory feeAmounts = new uint[](tokens.length);
         uint[] memory prevBalances = new uint[](tokens.length);
         // store current balances and fee amounts
-        for(uint i = 0 ; i < tokens.length ; ++i) {
+        for (uint i = 0; i < tokens.length; ++i) {
             prevBalances[i] = tokens[i].balanceOf(address(this));
             feeAmounts[i] = 0;
-        } 
+        }
 
         // transfer funds to flashloan recipient
-        for(uint i = 0 ; i < tokens.length ; ++i) {
+        for (uint i = 0; i < tokens.length; ++i) {
             tokens[i].safeTransfer(payable(address(recipient)), amounts[i]);
         }
 
@@ -57,7 +57,7 @@ contract MockBalancerVault {
         recipient.receiveFlashLoan(tokens, amounts, feeAmounts, userData);
 
         // check each of the tokens has been returned with the fee amount
-        for(uint i = 0 ; i < tokens.length ; ++i) {
+        for (uint i = 0; i < tokens.length; ++i) {
             IERC20 token = tokens[i];
 
             if (token.balanceOf(address(this)) < prevBalances[i] + feeAmounts[i]) {

@@ -351,11 +351,46 @@ contract BancorArbitrageV2ArbsTest is Test {
     }
 
     /**
+     * @dev test that onFlashloan cannot be called directly
+     */
+    function testShouldntBeAbleToCallReceiveFlashloanDirectly() public {
+        IERC20[] memory tokens = new IERC20[](1);
+        uint256[] memory amounts = new uint256[](1);
+        uint256[] memory feeAmounts = new uint256[](1);
+        tokens[0] = IERC20(address(bnt));
+        amounts[0] = 1;
+        feeAmounts[0] = 0;
+        vm.expectRevert(BancorArbitrage.InvalidFlashLoanCaller.selector);
+        bancorArbitrage.receiveFlashLoan(tokens, amounts, feeAmounts, "0x");
+    }
+
+    /**
      * @dev test correct obtaining and repayment of flashloan
      */
     function testShouldCorrectlyObtainAndRepayFlashloanFromBancorV3() public {
         BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, AMOUNT);
         BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoanCompleted(Token(address(bnt)), address(bancorArbitrage), AMOUNT, 0);
+        bancorArbitrage.flashloanAndArbV2(flashloans, routes);
+    }
+
+    /**
+     * @dev test correct obtaining and repayment of flashloan
+     */
+    function testShouldCorrectlyObtainAndRepayMultipleFlashloansFromBancorV3() public {
+        IERC20[] memory tokens = new IERC20[](2);
+        uint256[] memory amounts = new uint256[](2);
+        tokens[0] = bnt;
+        amounts[0] = AMOUNT;
+        tokens[1] = arbToken1;
+        amounts[1] = AMOUNT;
+        BancorArbitrage.Flashloan[] memory flashloans = getFlashloanDataForV3(tokens, amounts);
+        // get routes
+        BancorArbitrage.RouteV2[] memory routes = getRoutesCustomLength(3, uint16(PlatformId.UNISWAP_V3), 0, AMOUNT);
+        // expect two flashloan events are emitted from the flashloan source (bancor v3)
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoanCompleted(Token(address(arbToken1)), address(bancorArbitrage), AMOUNT, 0);
         vm.expectEmit(true, true, true, true);
         emit FlashLoanCompleted(Token(address(bnt)), address(bancorArbitrage), AMOUNT, 0);
         bancorArbitrage.flashloanAndArbV2(flashloans, routes);
@@ -377,12 +412,77 @@ contract BancorArbitrageV2ArbsTest is Test {
     }
 
     /**
-     * @dev test should revert if flashloan cannot be obtained
+     * @dev test correct obtaining and repayment of flashloan from balancer
      */
-    function testShouldRevertIfFlashloanCannotBeObtained() public {
+    function testShouldCorrectlyObtainAndRepayMultipleTokenFlashloanFromBalancer() public {
+        IERC20[] memory tokens = new IERC20[](2);
+        uint256[] memory amounts = new uint256[](2);
+        tokens[0] = bnt;
+        amounts[0] = AMOUNT;
+        tokens[1] = arbToken1;
+        amounts[1] = AMOUNT;
+        BancorArbitrage.Flashloan[] memory flashloans = getFlashloanDataForBalancer(tokens, amounts);
+        // get routes
+        BancorArbitrage.RouteV2[] memory routes = getRoutesCustomLength(3, uint16(PlatformId.UNISWAP_V3), 0, AMOUNT);
+        // expect two flashloan events are emitted from the flashloan source (balancer vault)
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoan(IFlashLoanRecipient(address(bancorArbitrage)), bnt, AMOUNT, 0);
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoan(IFlashLoanRecipient(address(bancorArbitrage)), arbToken1, AMOUNT, 0);
+        bancorArbitrage.flashloanAndArbV2(flashloans, routes);
+    }
+
+    /**
+     * @dev test correct obtaining and repayment of flashloan from balancer and bancor v3
+     */
+    function testShouldCorrectlyObtainAndRepayFlashloansFromBalancerAndBancorV3() public {
+        IERC20[] memory tokensBalancer = new IERC20[](2);
+        uint256[] memory amountsBalancer = new uint256[](2);
+        tokensBalancer[0] = bnt;
+        amountsBalancer[0] = AMOUNT;
+        tokensBalancer[1] = arbToken1;
+        amountsBalancer[1] = AMOUNT;
+        BancorArbitrage.Flashloan[] memory flashloansBalancer = getFlashloanDataForBalancer(
+            tokensBalancer,
+            amountsBalancer
+        );
+        BancorArbitrage.Flashloan[] memory flashloansBancorV3 = getSingleTokenFlashloanDataForV3(arbToken2, AMOUNT);
+        BancorArbitrage.Flashloan[] memory flashloans = new BancorArbitrage.Flashloan[](2);
+        flashloans[0] = flashloansBalancer[0];
+        flashloans[1] = flashloansBancorV3[0];
+        // get routes
+        BancorArbitrage.RouteV2[] memory routes = getRoutesCustomLength(3, uint16(PlatformId.UNISWAP_V3), 0, AMOUNT);
+        // expect all three flashloan events are emitted from the flashloan sources
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoanCompleted(Token(address(arbToken2)), address(bancorArbitrage), AMOUNT, 0);
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoan(IFlashLoanRecipient(address(bancorArbitrage)), bnt, AMOUNT, 0);
+        vm.expectEmit(true, true, true, true);
+        emit FlashLoan(IFlashLoanRecipient(address(bancorArbitrage)), arbToken1, AMOUNT, 0);
+        bancorArbitrage.flashloanAndArbV2(flashloans, routes);
+    }
+
+    /**
+     * @dev test should revert if flashloan cannot be obtained from bancor v3
+     */
+    function testShouldRevertIfFlashloanCannotBeObtainedFromBancorV3() public {
         BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, type(uint256).max);
         BancorArbitrage.RouteV2[] memory routes = getRoutes();
-        vm.expectRevert();
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
+        bancorArbitrage.flashloanAndArbV2(flashloans, routes);
+    }
+
+    /**
+     * @dev test should revert if flashloan cannot be obtained from balancer
+     */
+    function testShouldRevertIfFlashloanCannotBeObtainedFromBalancer() public {
+        IERC20[] memory tokens = new IERC20[](1);
+        uint256[] memory amounts = new uint256[](1);
+        tokens[0] = bnt;
+        amounts[0] = type(uint256).max;
+        BancorArbitrage.Flashloan[] memory flashloans = getFlashloanDataForBalancer(tokens, amounts);
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
         bancorArbitrage.flashloanAndArbV2(flashloans, routes);
     }
 
@@ -405,9 +505,9 @@ contract BancorArbitrageV2ArbsTest is Test {
     }
 
     /**
-     * @dev test that trade attempt reverts if exchange id is not supported
+     * @dev test that trade attempt reverts if platform id is not supported
      */
-    function testShouldRevertIfExchangeIdIsNotSupported(bool userFunded) public {
+    function testShouldRevertIfPlatformIdIsNotSupported(bool userFunded) public {
         BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, AMOUNT);
         BancorArbitrage.RouteV2[] memory routes = getRoutes();
         routes[0].platformId = 0;
@@ -1285,6 +1385,8 @@ contract BancorArbitrageV2ArbsTest is Test {
         for (uint256 i = 0; i < len; ++i) {
             IERC20[] memory _sourceTokens = new IERC20[](1);
             uint256[] memory _sourceAmounts = new uint256[](1);
+            _sourceTokens[0] = sourceTokens[i];
+            _sourceAmounts[0] = sourceAmounts[i];
             flashloans[i] = BancorArbitrage.Flashloan({
                 platformId: uint16(PlatformId.BANCOR_V3),
                 sourceTokens: _sourceTokens,
@@ -1314,6 +1416,32 @@ contract BancorArbitrageV2ArbsTest is Test {
             sourceTokens: sourceTokens,
             sourceAmounts: sourceAmounts
         });
+        return flashloans;
+    }
+
+    /**
+     * @dev get combined flashloan data for balancer and bancor v3
+     * TODO: fix index issue
+     */
+    function getCombinedFlashloanData(
+        IERC20[] memory sourceTokensBalancer,
+        uint256[] memory sourceAmountsBalancer,
+        IERC20[] memory sourceTokensBancorV3,
+        uint256[] memory sourceAmountsBancorV3
+    ) private pure returns (BancorArbitrage.Flashloan[] memory flashloans) {
+        flashloans = new BancorArbitrage.Flashloan[](sourceTokensBancorV3.length + 1);
+        BancorArbitrage.Flashloan[] memory flashloansBalancer = getFlashloanDataForBalancer(
+            sourceTokensBalancer,
+            sourceAmountsBalancer
+        );
+        BancorArbitrage.Flashloan[] memory flashloansBancor = getFlashloanDataForV3(
+            sourceTokensBancorV3,
+            sourceAmountsBancorV3
+        );
+        flashloans[0] = flashloansBalancer[0];
+        for (uint i = 1; i < sourceTokensBancorV3.length + 1; ++i) {
+            flashloans[i] = flashloansBancor[i - 1];
+        }
         return flashloans;
     }
 
@@ -1363,7 +1491,10 @@ contract BancorArbitrageV2ArbsTest is Test {
     /**
      * @dev get platforms struct for initialization of bancor arbitrage
      */
-    function getPlatformStruct(address _exchanges, address _balancerVault) public pure returns (BancorArbitrage.Platforms memory platformList) {
+    function getPlatformStruct(
+        address _exchanges,
+        address _balancerVault
+    ) public pure returns (BancorArbitrage.Platforms memory platformList) {
         platformList = BancorArbitrage.Platforms({
             bancorNetworkV2: IBancorNetworkV2(_exchanges),
             bancorNetworkV3: IBancorNetwork(_exchanges),

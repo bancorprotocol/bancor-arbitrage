@@ -24,6 +24,8 @@ import { ICarbonController, TradeAction } from "../exchanges/interfaces/ICarbonC
 import { PPM_RESOLUTION } from "../utility/Constants.sol";
 import { MathEx } from "../utility/MathEx.sol";
 
+import "hardhat/console.sol";
+
 /**
  * @dev BancorArbitrage contract
  */
@@ -337,7 +339,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev execute multi-step arbitrage trade between exchanges using a flashloan from Bancor Network V3
+     * @dev execute multi-step arbitrage trade between exchanges using one or more flashloans
      */
     function flashloanAndArbV2(
         Flashloan[] memory flashloans,
@@ -419,12 +421,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             _arbitrageV2(routes);
         } else {
             // else execute the next flashloan in the sequence
-            // Store the updated currentIndex back into the encoded data
-            /* solhint-disable no-inline-assembly */
-            assembly {
-                mstore(add(data, 32), add(currentIndex, 1))
-            }
-            /* solhint-enable no-inline-assembly */
+            // update the currentIndex in the encoded data
+            incrementIndex(data, currentIndex);
             if (flashloans[currentIndex].platformId == PLATFORM_ID_BANCOR_V3) {
                 _bancorNetworkV3.flashLoan(
                     Token(address(flashloans[currentIndex].sourceTokens[0])),
@@ -465,16 +463,12 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             (uint256, Flashloan[], RouteV2[])
         );
         // if we're at the final flashloan index, perform the arbitrage
-        if (currentIndex == flashloans.length - 1) {
+        if (currentIndex == flashloans.length) {
             _arbitrageV2(routes);
         } else {
             // else execute the next flashloan in the sequence
-            // Store the updated currentIndex back into the encoded data
-            /* solhint-disable no-inline-assembly */
-            assembly {
-                mstore(add(userData, 32), add(currentIndex, 1))
-            }
-            /* solhint-enable no-inline-assembly */
+            // update the currentIndex in the encoded data
+            incrementIndex(userData, currentIndex);
             if (flashloans[currentIndex].platformId == PLATFORM_ID_BANCOR_V3) {
                 _bancorNetworkV3.flashLoan(
                     Token(address(flashloans[currentIndex].sourceTokens[0])),
@@ -793,6 +787,32 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
+     * @dev extract tokens and amounts from Flashloan array
+     */
+    function _extractTokensAndAmounts(
+        Flashloan[] memory flashloans
+    ) private pure returns (IERC20[] memory, uint256[] memory) {
+        uint256 totalLength = 0;
+        for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
+            totalLength += flashloans[i].sourceTokens.length;
+        }
+
+        IERC20[] memory tokens = new IERC20[](totalLength);
+        uint256[] memory amounts = new uint256[](totalLength);
+
+        uint256 index = 0;
+        for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
+            for (uint256 j = 0; j < flashloans[i].sourceTokens.length; j = uncheckedInc(j)) {
+                tokens[index] = flashloans[i].sourceTokens[j];
+                amounts[index] = flashloans[i].sourceAmounts[j];
+                index = uncheckedInc(index);
+            }
+        }
+
+        return (tokens, amounts);
+    }
+
+    /**
      * @dev convert a V1 Route array to V2
      */
     function _convertRouteV1toV2(
@@ -838,6 +858,17 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             // increase allowance to the max amount if allowance < inputAmount
             token.safeIncreaseAllowance(exchange, type(uint256).max - allowance);
         }
+    }
+
+    /**
+     * @dev increment the abi-encoded flashloan and route data's index
+     */
+    function incrementIndex(bytes memory data, uint index) private pure {
+        /* solhint-disable no-inline-assembly */
+        assembly {
+            mstore(add(data, 32), add(index, 1))
+        }
+        /* solhint-enable no-inline-assembly */
     }
 
     function uncheckedInc(uint256 i) private pure returns (uint256 j) {
