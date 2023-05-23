@@ -24,8 +24,6 @@ import { ICarbonController, TradeAction } from "../exchanges/interfaces/ICarbonC
 import { PPM_RESOLUTION } from "../utility/Constants.sol";
 import { MathEx } from "../utility/MathEx.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @dev BancorArbitrage contract
  */
@@ -34,7 +32,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     using TokenLibrary for Token;
     using Address for address payable;
 
-    error InvalidExchangeId();
+    error InvalidTradePlatformId();
+    error InvalidFlashloanPlatformId();
     error InvalidRouteLength();
     error InvalidInitialAndFinalTokens();
     error InvalidFlashloanStructure();
@@ -68,16 +67,17 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         bytes customData;
     }
 
-    // rewards settings
-    struct Rewards {
-        uint32 percentagePPM;
-        uint256 maxAmount;
-    }
-
+    // flashloan args
     struct Flashloan {
         uint16 platformId;
         IERC20[] sourceTokens;
         uint256[] sourceAmounts;
+    }
+
+    // rewards settings
+    struct Rewards {
+        uint32 percentagePPM;
+        uint256 maxAmount;
     }
 
     // platforms
@@ -151,7 +151,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         address indexed caller,
         uint16[] exchangeIds,
         address[] tokenPath,
-        uint256 sourceAmount,
+        address[] sourceTokens,
+        uint256[] sourceAmounts,
         uint256 burnAmount,
         uint256 rewardAmount
     );
@@ -324,14 +325,14 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         // convert route array to new format
         RouteV2[] memory routesV2 = _convertRouteV1toV2(routes, token, sourceAmount);
         // create flashloan struct
-        IERC20[] memory tokens = new IERC20[](1);
+        IERC20[] memory sourceTokens = new IERC20[](1);
         uint256[] memory sourceAmounts = new uint256[](1);
-        tokens[0] = IERC20(address(token));
+        sourceTokens[0] = IERC20(address(token));
         sourceAmounts[0] = sourceAmount;
         Flashloan[] memory flashloan = new Flashloan[](1);
         flashloan[0] = Flashloan({
             platformId: PLATFORM_ID_BANCOR_V3,
-            sourceTokens: tokens,
+            sourceTokens: sourceTokens,
             sourceAmounts: sourceAmounts
         });
         // perform arb
@@ -347,23 +348,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     ) public nonReentrant validRouteLength(routes.length) validateFlashloans(flashloans) {
         // abi encode the data to be passed in to the flashloan platform
         bytes memory encodedData = abi.encode(uint256(1), flashloans, routes);
-        if (flashloans[0].platformId == PLATFORM_ID_BANCOR_V3) {
-            // take a flashloan on Bancor v3, execution continues in `onFlashloan`
-            _bancorNetworkV3.flashLoan(
-                Token(address(flashloans[0].sourceTokens[0])),
-                flashloans[0].sourceAmounts[0],
-                IFlashLoanRecipient(address(this)),
-                encodedData
-            );
-        } else if (flashloans[0].platformId == PLATFORM_ID_BALANCER) {
-            // take a flashloan on Balancer, execution continues in `receiveFlashLoan`
-            _balancerVault.flashLoan(
-                BalancerFlashloanRecipient(address(this)),
-                flashloans[0].sourceTokens,
-                flashloans[0].sourceAmounts,
-                encodedData
-            );
-        }
+        // take flashloan
+        _takeFlashloan(flashloans[0], encodedData);
 
         // trade leftover tokens for BNT on Bancor Network V3
         for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
@@ -392,7 +378,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // allocate the rewards
-        _allocateRewards(routes, flashloans[0].sourceAmounts[0], msg.sender);
+        (address[] memory sourceTokens, uint256[] memory sourceAmounts) = _extractTokensAndAmounts(flashloans);
+        _allocateRewards(sourceTokens, sourceAmounts, routes, msg.sender);
     }
 
     /**
@@ -422,22 +409,9 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         } else {
             // else execute the next flashloan in the sequence
             // update the currentIndex in the encoded data
-            incrementIndex(data, currentIndex);
-            if (flashloans[currentIndex].platformId == PLATFORM_ID_BANCOR_V3) {
-                _bancorNetworkV3.flashLoan(
-                    Token(address(flashloans[currentIndex].sourceTokens[0])),
-                    flashloans[currentIndex].sourceAmounts[0],
-                    IFlashLoanRecipient(address(this)),
-                    data
-                );
-            } else if (flashloans[currentIndex].platformId == PLATFORM_ID_BALANCER) {
-                _balancerVault.flashLoan(
-                    BalancerFlashloanRecipient(address(this)),
-                    flashloans[currentIndex].sourceTokens,
-                    flashloans[currentIndex].sourceAmounts,
-                    data
-                );
-            }
+            _incrementIndex(data, currentIndex);
+            // take flashloan
+            _takeFlashloan(flashloans[currentIndex], data);
         }
 
         // return the flashloan
@@ -468,22 +442,9 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         } else {
             // else execute the next flashloan in the sequence
             // update the currentIndex in the encoded data
-            incrementIndex(userData, currentIndex);
-            if (flashloans[currentIndex].platformId == PLATFORM_ID_BANCOR_V3) {
-                _bancorNetworkV3.flashLoan(
-                    Token(address(flashloans[currentIndex].sourceTokens[0])),
-                    flashloans[currentIndex].sourceAmounts[0],
-                    IFlashLoanRecipient(address(this)),
-                    userData
-                );
-            } else if (flashloans[currentIndex].platformId == PLATFORM_ID_BALANCER) {
-                _balancerVault.flashLoan(
-                    BalancerFlashloanRecipient(address(this)),
-                    flashloans[currentIndex].sourceTokens,
-                    flashloans[currentIndex].sourceAmounts,
-                    userData
-                );
-            }
+            _incrementIndex(userData, currentIndex);
+            // take flashloan
+            _takeFlashloan(flashloans[currentIndex], userData);
         }
 
         // return the flashloans
@@ -520,7 +481,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         // allocate the rewards
-        _allocateRewards(routes, sourceAmount, msg.sender);
+        address[] memory sourceTokens = new address[](1);
+        uint256[] memory sourceAmounts = new uint256[](1);
+        sourceTokens[0] = address(token);
+        sourceAmounts[0] = sourceAmount;
+        _allocateRewards(sourceTokens, sourceAmounts, routes, msg.sender);
     }
 
     /**
@@ -549,6 +514,32 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             if (value > 0) {
                 revert InvalidETHAmountSent();
             }
+        }
+    }
+
+    /**
+     * @dev flashloan logic
+     */
+    function _takeFlashloan(Flashloan memory flashloan, bytes memory data) private {
+        if (flashloan.platformId == PLATFORM_ID_BANCOR_V3) {
+            // take a flashloan on Bancor v3, execution continues in `onFlashloan`
+            _bancorNetworkV3.flashLoan(
+                Token(address(flashloan.sourceTokens[0])),
+                flashloan.sourceAmounts[0],
+                IFlashLoanRecipient(address(this)),
+                data
+            );
+        } else if (flashloan.platformId == PLATFORM_ID_BALANCER) {
+            // take a flashloan on Balancer, execution continues in `receiveFlashLoan`
+            _balancerVault.flashLoan(
+                BalancerFlashloanRecipient(address(this)),
+                flashloan.sourceTokens,
+                flashloan.sourceAmounts,
+                data
+            );
+        } else {
+            // invalid flashloan platform
+            revert InvalidFlashloanPlatformId();
         }
     }
 
@@ -731,13 +722,18 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             return;
         }
 
-        revert InvalidExchangeId();
+        revert InvalidTradePlatformId();
     }
 
     /**
      * @dev allocates the rewards to the caller and burns the rest
      */
-    function _allocateRewards(RouteV2[] memory routes, uint256 sourceAmount, address caller) internal {
+    function _allocateRewards(
+        address[] memory sourceTokens,
+        uint256[] memory sourceAmounts,
+        RouteV2[] memory routes,
+        address caller
+    ) internal {
         // get the total amount
         uint256 totalAmount = _bnt.balanceOf(address(this));
 
@@ -768,7 +764,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
 
         (uint16[] memory exchangeIds, address[] memory path) = _buildArbPath(routes);
-        emit ArbitrageExecuted(caller, exchangeIds, path, sourceAmount, burnAmount, rewardAmount);
+        emit ArbitrageExecuted(caller, exchangeIds, path, sourceTokens, sourceAmounts, burnAmount, rewardAmount);
     }
 
     /**
@@ -791,19 +787,19 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     function _extractTokensAndAmounts(
         Flashloan[] memory flashloans
-    ) private pure returns (IERC20[] memory, uint256[] memory) {
+    ) private pure returns (address[] memory, uint256[] memory) {
         uint256 totalLength = 0;
         for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
             totalLength += flashloans[i].sourceTokens.length;
         }
 
-        IERC20[] memory tokens = new IERC20[](totalLength);
+        address[] memory tokens = new address[](totalLength);
         uint256[] memory amounts = new uint256[](totalLength);
 
         uint256 index = 0;
         for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
             for (uint256 j = 0; j < flashloans[i].sourceTokens.length; j = uncheckedInc(j)) {
-                tokens[index] = flashloans[i].sourceTokens[j];
+                tokens[index] = address(flashloans[i].sourceTokens[j]);
                 amounts[index] = flashloans[i].sourceAmounts[j];
                 index = uncheckedInc(index);
             }
@@ -863,7 +859,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev increment the abi-encoded flashloan and route data's index
      */
-    function incrementIndex(bytes memory data, uint index) private pure {
+    function _incrementIndex(bytes memory data, uint index) private pure {
         /* solhint-disable no-inline-assembly */
         assembly {
             mstore(add(data, 32), add(index, 1))
