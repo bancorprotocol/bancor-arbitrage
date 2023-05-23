@@ -75,6 +75,7 @@ contract BancorArbitrageTest is Test {
         BancorArbitrage.Rewards({ percentagePPM: 40000, maxAmount: 200 ether });
 
     // Events
+
     /**
      * @dev triggered after a successful arb is executed
      */
@@ -82,7 +83,8 @@ contract BancorArbitrageTest is Test {
         address indexed caller,
         uint16[] exchangeIds,
         address[] tokenPath,
-        uint256 sourceAmount,
+        address[] sourceTokens,
+        uint256[] sourceAmounts,
         uint256 burnAmount,
         uint256 rewardAmount
     );
@@ -407,10 +409,23 @@ contract BancorArbitrageTest is Test {
             tokenPath[4] = tokens[(i + 2) % 4];
             tokenPath[5] = tokens[i];
 
+            address[] memory sourceTokens = new address[](1);
+            uint256[] memory sourceAmounts = new uint256[](1);
+            sourceTokens[0] = tokens[i];
+            sourceAmounts[0] = AMOUNT;
+
             vm.startPrank(user1);
 
             vm.expectEmit(true, true, true, true);
-            emit ArbitrageExecuted(user1, exchangeIds, tokenPath, AMOUNT, expectedBntBurn, expectedUserReward);
+            emit ArbitrageExecuted(
+                user1,
+                exchangeIds,
+                tokenPath,
+                sourceTokens,
+                sourceAmounts,
+                expectedBntBurn,
+                expectedUserReward
+            );
             vm.stopPrank();
             executeArbitrageNoApproval(routes, Token(tokens[i]), AMOUNT);
         }
@@ -473,10 +488,23 @@ contract BancorArbitrageTest is Test {
             tokenPath[4] = tokens[(i + 2) % 4];
             tokenPath[5] = tokens[i];
 
+            address[] memory sourceTokens = new address[](1);
+            uint256[] memory sourceAmounts = new uint256[](1);
+            sourceTokens[0] = tokens[i];
+            sourceAmounts[0] = AMOUNT;
+
             vm.startPrank(user1);
 
             vm.expectEmit(true, true, true, true);
-            emit ArbitrageExecuted(user1, exchangeIds, tokenPath, AMOUNT, expectedBntBurn, expectedUserReward);
+            emit ArbitrageExecuted(
+                user1,
+                exchangeIds,
+                tokenPath,
+                sourceTokens,
+                sourceAmounts,
+                expectedBntBurn,
+                expectedUserReward
+            );
             vm.stopPrank();
             executeArbitrageNoApproval(routes, Token(tokens[i]), AMOUNT);
         }
@@ -529,14 +557,14 @@ contract BancorArbitrageTest is Test {
     }
 
     /**
-     * @dev test that trade attempt reverts if exchange id is not supported
+     * @dev test that trade attempt reverts if platform id is not supported
      */
-    function testShouldRevertIfExchangeIdIsNotSupported() public {
+    function testShouldRevertIfPlatformIdIsNotSupportedForTrade() public {
         BancorArbitrage.Route[] memory routes = getRoutes();
         routes[0].platformId = 0;
         vm.startPrank(user1);
         Token(address(bnt)).safeApprove(address(bancorArbitrage), AMOUNT);
-        vm.expectRevert(BancorArbitrage.InvalidExchangeId.selector);
+        vm.expectRevert(BancorArbitrage.InvalidTradePlatformId.selector);
         vm.stopPrank();
         executeArbitrageNoApproval(routes, Token(address(bnt)), AMOUNT);
     }
@@ -652,8 +680,12 @@ contract BancorArbitrageTest is Test {
         BancorArbitrage.Route[] memory routes = getRoutes();
         uint16[] memory exchangeIds = new uint16[](0);
         address[] memory tradePath = new address[](0);
+        address[] memory sourceTokens = new address[](1);
+        uint256[] memory sourceAmounts = new uint256[](1);
+        sourceTokens[0] = address(bnt);
+        sourceAmounts[0] = AMOUNT;
         vm.expectEmit(false, false, false, false);
-        emit ArbitrageExecuted(admin, exchangeIds, tradePath, AMOUNT, 0, 0);
+        emit ArbitrageExecuted(admin, exchangeIds, tradePath, sourceTokens, sourceAmounts, 0, 0);
         bancorArbitrage.flashloanAndArb(routes, Token(address(bnt)), AMOUNT);
     }
 

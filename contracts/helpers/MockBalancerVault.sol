@@ -18,6 +18,7 @@ contract MockBalancerVault {
     using TokenLibrary for Token;
 
     error InsufficientFlashLoanReturn();
+    error NotEnoughBalanceForFlashloan();
     error InputLengthMismatch();
 
     /**
@@ -44,13 +45,16 @@ contract MockBalancerVault {
         uint[] memory prevBalances = new uint[](tokens.length);
         // store current balances and fee amounts
         for (uint i = 0; i < tokens.length; ++i) {
-            prevBalances[i] = tokens[i].balanceOf(address(this));
+            prevBalances[i] = Token(address(tokens[i])).balanceOf(address(this));
             feeAmounts[i] = 0;
         }
 
         // transfer funds to flashloan recipient
         for (uint i = 0; i < tokens.length; ++i) {
-            tokens[i].safeTransfer(payable(address(recipient)), amounts[i]);
+            if (amounts[i] > prevBalances[i]) {
+                revert NotEnoughBalanceForFlashloan();
+            }
+            Token(address(tokens[i])).safeTransfer(payable(address(recipient)), amounts[i]);
         }
 
         // trigger flashloan callback
@@ -60,7 +64,7 @@ contract MockBalancerVault {
         for (uint i = 0; i < tokens.length; ++i) {
             IERC20 token = tokens[i];
 
-            if (token.balanceOf(address(this)) < prevBalances[i] + feeAmounts[i]) {
+            if (Token(address(token)).balanceOf(address(this)) < prevBalances[i] + feeAmounts[i]) {
                 revert InsufficientFlashLoanReturn();
             }
             emit FlashLoan(recipient, token, amounts[i], feeAmounts[i]);

@@ -859,7 +859,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev increment the abi-encoded flashloan and route data's index
      */
-    function _incrementIndex(bytes memory data, uint index) private pure {
+    function _incrementIndex(bytes memory data, uint256 index) private pure {
         /* solhint-disable no-inline-assembly */
         assembly {
             mstore(add(data, 32), add(index, 1))

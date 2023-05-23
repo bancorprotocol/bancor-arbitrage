@@ -78,6 +78,7 @@ contract MockExchanges {
         }
         uint feeAmount = 0;
         uint prevBalance = token.balanceOf(address(this));
+        uint prevWethBalance = _weth.balanceOf(address(this));
 
         // transfer funds to flashloan recipient
         token.safeTransfer(payable(address(recipient)), amount);
@@ -98,6 +99,12 @@ contract MockExchanges {
             expectedBalance = prevBalance - gain;
         } else {
             expectedBalance = prevBalance + gain;
+        }
+        // account for weth gains if token is native (uni v3 swaps convert eth to weth)
+        if (token.isNative()) {
+            uint wethBalance = _weth.balanceOf(address(this));
+            uint wethGain = wethBalance - prevWethBalance;
+            expectedBalance -= wethGain;
         }
 
         if (token.balanceOf(address(this)) < expectedBalance) {
