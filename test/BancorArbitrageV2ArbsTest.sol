@@ -619,13 +619,19 @@ contract BancorArbitrageV2ArbsTest is Test {
                     AMOUNT,
                     500
                 );
+                vm.startPrank(user1);
+                // approve token if user-funded arb
+                if (userFunded) {
+                    Token(address(bnt)).safeApprove(address(bancorArbitrage), AMOUNT);
+                }
                 uint allowance = arbToken1.allowance(address(bancorArbitrage), address(exchanges));
                 if (allowance == 0) {
                     // expect arbToken1 to emit the approval event
                     vm.expectEmit(true, true, true, true, address(arbToken1));
                     emit Approval(address(bancorArbitrage), address(exchanges), approveAmount);
                 }
-                executeArbitrage(flashloans, routes, userFunded);
+                vm.stopPrank();
+                executeArbitrageNoApproval(flashloans, routes, userFunded);
             }
         }
     }
@@ -887,9 +893,6 @@ contract BancorArbitrageV2ArbsTest is Test {
         vm.assume(arbAmount > 0 && arbAmount < AMOUNT);
         // test exchange ids 1 - 5 (w/o Carbon)
         platformId = uint16(bound(platformId, FIRST_EXCHANGE_ID, 5));
-        // if(platformId == uint16(PlatformId.UNISWAP_V3)) {
-        //     platformId = uint16(PlatformId.SUSHISWAP);
-        // }
         address[] memory tokensToTrade = new address[](3);
         tokensToTrade[0] = address(arbToken1);
         tokensToTrade[1] = address(arbToken2);
