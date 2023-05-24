@@ -78,7 +78,7 @@ contract BancorArbitrageV2ArbsTest is Test {
         BancorArbitrage.Rewards({ percentagePPM: 40000, maxAmount: 200 ether });
 
     // Events
-    
+
     /**
      * @dev triggered after a successful arb is executed
      */
