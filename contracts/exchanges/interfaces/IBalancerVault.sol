@@ -21,7 +21,7 @@ interface IFlashLoanRecipient {
     ) external;
 }
 
-interface IVault {
+interface IBalancerVault {
 /**
      * @dev Performs a 'flash loan', sending tokens to `recipient`, executing the `receiveFlashLoan` hook on it,
      * and then reverting unless the tokens plus a proportional protocol fee have been returned.

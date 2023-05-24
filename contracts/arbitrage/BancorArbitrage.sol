@@ -10,8 +10,8 @@ import { IUniswapV2Router02 } from "@uniswap/v2-periphery/contracts/interfaces/I
 import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import { IWETH } from "@uniswap/v2-periphery/contracts/interfaces/IWETH.sol";
 
-import { IVault } from "../exchanges/interfaces/IVault.sol";
-import { IFlashLoanRecipient as BalancerFlashloanRecipient } from "../exchanges/interfaces/IVault.sol";
+import { IBalancerVault } from "../exchanges/interfaces/IBalancerVault.sol";
+import { IFlashLoanRecipient as BalancerFlashloanRecipient } from "../exchanges/interfaces/IBalancerVault.sol";
 
 import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
@@ -88,7 +88,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         ISwapRouter uniV3Router;
         IUniswapV2Router02 sushiswapRouter;
         ICarbonController carbonController;
-        IVault balancerVault;
+        IBalancerVault balancerVault;
     }
 
     // platform ids
@@ -130,7 +130,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     ICarbonController internal immutable _carbonController;
 
     // Balancer Vault
-    IVault internal immutable _balancerVault;
+    IBalancerVault internal immutable _balancerVault;
 
     // Dust wallet address
     address internal immutable _dustWallet;
@@ -149,7 +149,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     event ArbitrageExecuted(
         address indexed caller,
-        uint16[] exchangeIds,
+        uint16[] platformIds,
         address[] tokenPath,
         address[] sourceTokens,
         uint256[] sourceAmounts,
@@ -356,7 +356,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             IERC20[] memory tokens = flashloans[i].sourceTokens;
             for (uint256 j = 0; j < tokens.length; j = uncheckedInc(j)) {
                 Token token = Token(address(tokens[j]));
-                // check token is not bnt and is tradeable on bancor v3
+                // check token is not BNT and is tradeable on bancor v3
                 if (!token.isEqual(_bnt) && _bancorNetworkV3.collectionByPool(token) != address(0)) {
                     uint256 leftover = token.balanceOf(address(this));
                     // check we have > 0 balance
@@ -523,6 +523,9 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     function _takeFlashloan(Flashloan memory flashloan, bytes memory data) private {
         if (flashloan.platformId == PLATFORM_ID_BANCOR_V3) {
             // take a flashloan on Bancor v3, execution continues in `onFlashloan`
+            if(flashloan.sourceTokens.length > 1) {
+                revert InvalidFlashloanStructure();
+            }
             _bancorNetworkV3.flashLoan(
                 Token(address(flashloan.sourceTokens[0])),
                 flashloan.sourceAmounts[0],
@@ -589,7 +592,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     ) private {
         if (platformId == PLATFORM_ID_BANCOR_V2) {
             // allow the network to withdraw the source tokens
-            _setExchangeAllowance(sourceToken, address(_bancorNetworkV2), sourceAmount);
+            _setPlatformAllowance(sourceToken, address(_bancorNetworkV2), sourceAmount);
 
             // build the conversion path
             address[] memory path = new address[](3);
@@ -614,7 +617,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         if (platformId == PLATFORM_ID_BANCOR_V3) {
             // allow the network to withdraw the source tokens
-            _setExchangeAllowance(sourceToken, address(_bancorNetworkV3), sourceAmount);
+            _setPlatformAllowance(sourceToken, address(_bancorNetworkV3), sourceAmount);
 
             uint256 val = sourceToken.isNative() ? sourceAmount : 0;
 
@@ -635,7 +638,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             IUniswapV2Router02 router = platformId == PLATFORM_ID_UNISWAP_V2 ? _uniswapV2Router : _sushiSwapRouter;
 
             // allow the router to withdraw the source tokens
-            _setExchangeAllowance(sourceToken, address(router), sourceAmount);
+            _setPlatformAllowance(sourceToken, address(router), sourceAmount);
 
             // build the path
             address[] memory path = new address[](2);
@@ -667,7 +670,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             }
 
             // allow the router to withdraw the source tokens
-            _setExchangeAllowance(Token(tokenIn), address(_uniswapV3Router), sourceAmount);
+            _setPlatformAllowance(Token(tokenIn), address(_uniswapV3Router), sourceAmount);
 
             // build the params
             ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
@@ -697,7 +700,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
                 revert MinTargetAmountTooHigh();
             }
             // allow the carbon controller to withdraw the source tokens
-            _setExchangeAllowance(sourceToken, address(_carbonController), sourceAmount);
+            _setPlatformAllowance(sourceToken, address(_carbonController), sourceAmount);
 
             uint256 val = sourceToken.isNative() ? sourceAmount : 0;
 
@@ -763,8 +766,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             _bnt.safeTransfer(caller, rewardAmount);
         }
 
-        (uint16[] memory exchangeIds, address[] memory path) = _buildArbPath(routes);
-        emit ArbitrageExecuted(caller, exchangeIds, path, sourceTokens, sourceAmounts, burnAmount, rewardAmount);
+        (uint16[] memory platformIds, address[] memory path) = _buildArbPath(routes);
+        emit ArbitrageExecuted(caller, platformIds, path, sourceTokens, sourceAmounts, burnAmount, rewardAmount);
     }
 
     /**
@@ -772,11 +775,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     function _buildArbPath(
         RouteV2[] memory routes
-    ) private pure returns (uint16[] memory exchangeIds, address[] memory path) {
-        exchangeIds = new uint16[](routes.length);
+    ) private pure returns (uint16[] memory platformIds, address[] memory path) {
+        platformIds = new uint16[](routes.length);
         path = new address[](routes.length * 2);
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
-            exchangeIds[i] = routes[i].platformId;
+            platformIds[i] = routes[i].platformId;
             path[i * 2] = address(routes[i].sourceToken);
             path[uncheckedInc(i * 2)] = address(routes[i].targetToken);
         }
@@ -843,16 +846,16 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev set exchange allowance to the max amount if it's less than the input amount
+     * @dev set platform allowance to the max amount if it's less than the input amount
      */
-    function _setExchangeAllowance(Token token, address exchange, uint256 inputAmount) private {
+    function _setPlatformAllowance(Token token, address platform, uint256 inputAmount) private {
         if (token.isNative()) {
             return;
         }
-        uint256 allowance = token.toIERC20().allowance(address(this), exchange);
+        uint256 allowance = token.toIERC20().allowance(address(this), platform);
         if (allowance < inputAmount) {
             // increase allowance to the max amount if allowance < inputAmount
-            token.safeIncreaseAllowance(exchange, type(uint256).max - allowance);
+            token.safeIncreaseAllowance(platform, type(uint256).max - allowance);
         }
     }
 
@@ -878,8 +881,14 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      *      check if any of the flashloan amounts are zero in value
      */
     modifier validateFlashloans(Flashloan[] memory flashloans) {
+        if(flashloans.length == 0) {
+            revert InvalidFlashloanStructure();
+        }
         for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
             Flashloan memory flashloan = flashloans[i];
+            if(flashloan.sourceTokens.length == 0) {
+                revert InvalidFlashloanStructure();
+            }
             if (flashloan.sourceTokens.length != flashloan.sourceAmounts.length) {
                 revert InvalidFlashloanStructure();
             }

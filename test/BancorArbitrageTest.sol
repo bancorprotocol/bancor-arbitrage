@@ -21,7 +21,7 @@ import { TestWETH } from "../contracts/helpers/TestWETH.sol";
 import { IBancorNetworkV2 } from "../contracts/exchanges/interfaces/IBancorNetworkV2.sol";
 import { IBancorNetwork, IFlashLoanRecipient } from "../contracts/exchanges/interfaces/IBancorNetwork.sol";
 import { ICarbonController, TradeAction } from "../contracts/exchanges/interfaces/ICarbonController.sol";
-import { IVault } from "../contracts/exchanges/interfaces/IVault.sol";
+import { IBalancerVault } from "../contracts/exchanges/interfaces/IBalancerVault.sol";
 import { PPM_RESOLUTION } from "../contracts/utility/Constants.sol";
 import { TestERC20Token } from "../contracts/helpers/TestERC20Token.sol";
 
@@ -81,7 +81,7 @@ contract BancorArbitrageTest is Test {
      */
     event ArbitrageExecuted(
         address indexed caller,
-        uint16[] exchangeIds,
+        uint16[] platformIds,
         address[] tokenPath,
         address[] sourceTokens,
         uint256[] sourceAmounts,
@@ -1194,7 +1194,7 @@ contract BancorArbitrageTest is Test {
             uniV3Router: ISwapRouter(_exchanges),
             sushiswapRouter: IUniswapV2Router02(_exchanges),
             carbonController: ICarbonController(_exchanges),
-            balancerVault: IVault(_exchanges)
+            balancerVault: IBalancerVault(_exchanges)
         });
     }
 

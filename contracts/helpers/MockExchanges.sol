@@ -10,7 +10,7 @@ import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
-import { IFlashLoanRecipient as BalancerFlashloanRecipient } from "../exchanges/interfaces/IVault.sol";
+import { IFlashLoanRecipient as BalancerFlashloanRecipient } from "../exchanges/interfaces/IBalancerVault.sol";
 
 import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 

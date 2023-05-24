@@ -9,7 +9,7 @@ import { ISwapRouter } from "@uniswap/v3-periphery/contracts/interfaces/ISwapRou
 import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
-import { IFlashLoanRecipient } from "../exchanges/interfaces/IVault.sol";
+import { IFlashLoanRecipient } from "../exchanges/interfaces/IBalancerVault.sol";
 
 import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 
@@ -41,16 +41,16 @@ contract MockBalancerVault {
         if (tokens.length != amounts.length) {
             revert InputLengthMismatch();
         }
-        uint[] memory feeAmounts = new uint[](tokens.length);
-        uint[] memory prevBalances = new uint[](tokens.length);
+        uint256[] memory feeAmounts = new uint256[](tokens.length);
+        uint256[] memory prevBalances = new uint256[](tokens.length);
         // store current balances and fee amounts
-        for (uint i = 0; i < tokens.length; ++i) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             prevBalances[i] = Token(address(tokens[i])).balanceOf(address(this));
             feeAmounts[i] = 0;
         }
 
         // transfer funds to flashloan recipient
-        for (uint i = 0; i < tokens.length; ++i) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             if (amounts[i] > prevBalances[i]) {
                 revert NotEnoughBalanceForFlashloan();
             }
@@ -61,7 +61,7 @@ contract MockBalancerVault {
         recipient.receiveFlashLoan(tokens, amounts, feeAmounts, userData);
 
         // check each of the tokens has been returned with the fee amount
-        for (uint i = 0; i < tokens.length; ++i) {
+        for (uint256 i = 0; i < tokens.length; ++i) {
             IERC20 token = tokens[i];
 
             if (Token(address(token)).balanceOf(address(this)) < prevBalances[i] + feeAmounts[i]) {
