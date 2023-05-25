@@ -523,9 +523,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     function _takeFlashloan(Flashloan memory flashloan, bytes memory data) private {
         if (flashloan.platformId == PLATFORM_ID_BANCOR_V3) {
             // take a flashloan on Bancor v3, execution continues in `onFlashloan`
-            if (flashloan.sourceTokens.length > 1) {
-                revert InvalidFlashloanStructure();
-            }
             _bancorNetworkV3.flashLoan(
                 Token(address(flashloan.sourceTokens[0])),
                 flashloan.sourceAmounts[0],
@@ -877,7 +874,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev check if there is a mismatch between sourceTokens and sourceAmounts length for each flashloan
+     * @dev perform various checks for flashloan source tokens and amounts
      *      check if any of the flashloan amounts are zero in value
      */
     modifier validateFlashloans(Flashloan[] memory flashloans) {
@@ -892,6 +889,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             if (flashloan.sourceTokens.length != flashloan.sourceAmounts.length) {
                 revert InvalidFlashloanStructure();
             }
+            if (flashloan.platformId == PLATFORM_ID_BANCOR_V3 && flashloan.sourceTokens.length > 1) {
+                revert InvalidFlashloanStructure();
+            }
+            // check source amounts are not zero in value
             uint256[] memory sourceAmounts = flashloan.sourceAmounts;
             for (uint256 j = 0; j < sourceAmounts.length; j = uncheckedInc(j)) {
                 if (sourceAmounts[j] == 0) {
