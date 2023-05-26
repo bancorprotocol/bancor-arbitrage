@@ -55,7 +55,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     // trade args v2
-    struct RouteV2 {
+    struct TradeRoute {
         uint16 platformId;
         Token sourceToken;
         Token targetToken;
@@ -323,7 +323,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     function flashloanAndArb(Route[] calldata routes, Token token, uint256 sourceAmount) external {
         // convert route array to new format
-        RouteV2[] memory routesV2 = _convertRouteV1toV2(routes, token, sourceAmount);
+        TradeRoute[] memory routesV2 = _convertRouteV1toV2(routes, token, sourceAmount);
         // create flashloan struct
         IERC20[] memory sourceTokens = new IERC20[](1);
         uint256[] memory sourceAmounts = new uint256[](1);
@@ -344,7 +344,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     function flashloanAndArbV2(
         Flashloan[] memory flashloans,
-        RouteV2[] memory routes
+        TradeRoute[] memory routes
     ) public nonReentrant validRouteLength(routes.length) validateFlashloans(flashloans) {
         // abi encode the data to be passed in to the flashloan platform
         bytes memory encodedData = abi.encode(uint256(1), flashloans, routes);
@@ -432,7 +432,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      * @dev must approve token before executing the function
      */
     function fundAndArb(
-        RouteV2[] calldata routes,
+        TradeRoute[] calldata routes,
         Token token,
         uint256 sourceAmount
     ) external payable nonReentrant validRouteLength(routes.length) greaterThanZero(sourceAmount) {
@@ -493,9 +493,9 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
     function _decodeAndActOnFlashloanData(bytes memory data) private {
         // decode the arb data
-        (uint256 currentIndex, Flashloan[] memory flashloans, RouteV2[] memory routes) = abi.decode(
+        (uint256 currentIndex, Flashloan[] memory flashloans, TradeRoute[] memory routes) = abi.decode(
             data,
-            (uint256, Flashloan[], RouteV2[])
+            (uint256, Flashloan[], TradeRoute[])
         );
         // if we're at the final flashloan index, perform the arbitrage
         if (currentIndex == flashloans.length) {
@@ -538,10 +538,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     /**
      * @dev arbitrage logic
      */
-    function _arbitrageV2(RouteV2[] memory routes) private {
+    function _arbitrageV2(TradeRoute[] memory routes) private {
         // perform the trade routes
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
-            RouteV2 memory route = routes[i];
+            TradeRoute memory route = routes[i];
             uint256 sourceTokenBalance = route.sourceToken.balanceOf(address(this));
             uint256 sourceAmount;
             if (route.sourceAmount == 0 || route.sourceAmount > sourceTokenBalance) {
@@ -723,7 +723,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     function _allocateRewards(
         address[] memory sourceTokens,
         uint256[] memory sourceAmounts,
-        RouteV2[] memory routes,
+        TradeRoute[] memory routes,
         address caller
     ) internal {
         // get the total amount
@@ -760,10 +760,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev build arb path from RouteV2 array
+     * @dev build arb path from TradeRoute array
      */
     function _buildArbPath(
-        RouteV2[] memory routes
+        TradeRoute[] memory routes
     ) private pure returns (uint16[] memory platformIds, address[] memory path) {
         platformIds = new uint16[](routes.length);
         path = new address[](routes.length * 2);
@@ -807,8 +807,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         Route[] calldata routes,
         Token sourceToken,
         uint256 sourceAmount
-    ) private pure returns (RouteV2[] memory routesV2) {
-        routesV2 = new RouteV2[](routes.length);
+    ) private pure returns (TradeRoute[] memory routesV2) {
+        routesV2 = new TradeRoute[](routes.length);
         if (routes.length == 0) {
             return routesV2;
         }
@@ -817,7 +817,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         // set each route details
         for (uint256 i = 0; i < routes.length; i = uncheckedInc(i)) {
             Route memory route = routes[i];
-            RouteV2 memory routeV2 = routesV2[i];
+            TradeRoute memory routeV2 = routesV2[i];
             // copy mutual parts
             routeV2.platformId = route.platformId;
             routeV2.targetToken = route.targetToken;

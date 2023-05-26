@@ -88,9 +88,9 @@ contract MockExchanges {
 
         // account for net gain in the token which is sent from this contract
         // decode data to count the swaps
-        (, , BancorArbitrage.RouteV2[] memory routes) = abi.decode(
+        (, , BancorArbitrage.TradeRoute[] memory routes) = abi.decode(
             data,
-            (uint256, BancorArbitrage.Flashloan[], BancorArbitrage.RouteV2[])
+            (uint256, BancorArbitrage.Flashloan[], BancorArbitrage.TradeRoute[])
         );
         uint swapCount = address(token) == _bnt ? routes.length : routes.length + 1;
         uint gain = swapCount * _outputAmount;
