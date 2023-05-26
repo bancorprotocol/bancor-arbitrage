@@ -316,39 +316,6 @@ contract BancorArbitrageV2ArbsTest is Test {
     /// --- Flashloan tests --- ///
 
     /**
-     * @dev test that onFlashloan cannot be called directly
-     */
-    function testShouldntBeAbleToCallOnFlashloanDirectly() public {
-        vm.expectRevert(BancorArbitrage.InvalidFlashLoanCaller.selector);
-        bancorArbitrage.onFlashLoan(address(bancorArbitrage), IERC20(address(bnt)), 1, 0, "0x");
-    }
-
-    /**
-     * @dev test that onFlashloan cannot be called directly
-     */
-    function testShouldntBeAbleToCallReceiveFlashloanDirectly() public {
-        IERC20[] memory tokens = new IERC20[](1);
-        uint256[] memory amounts = new uint256[](1);
-        uint256[] memory feeAmounts = new uint256[](1);
-        tokens[0] = IERC20(address(bnt));
-        amounts[0] = 1;
-        feeAmounts[0] = 0;
-        vm.expectRevert(BancorArbitrage.InvalidFlashLoanCaller.selector);
-        bancorArbitrage.receiveFlashLoan(tokens, amounts, feeAmounts, "0x");
-    }
-
-    /**
-     * @dev test that flashloan attempt reverts if platform id is not supported
-     */
-    function testShouldRevertIfPlatformIdIsNotSupportedForFlashloan() public {
-        BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, AMOUNT);
-        flashloans[0].platformId = uint16(PlatformId.BANCOR_V2);
-        BancorArbitrage.RouteV2[] memory routes = getRoutes();
-        vm.expectRevert(BancorArbitrage.InvalidFlashloanPlatformId.selector);
-        executeArbitrage(flashloans, routes, false);
-    }
-
-    /**
      * @dev test correct obtaining and repayment of flashloan
      */
     function testShouldCorrectlyObtainAndRepayFlashloanFromBancorV3() public {
@@ -451,6 +418,105 @@ contract BancorArbitrageV2ArbsTest is Test {
         // balancer flashloan event
         emit FlashLoan(IFlashLoanRecipient(address(bancorArbitrage)), arbToken1, AMOUNT, 0);
         bancorArbitrage.flashloanAndArbV2(flashloans, routes);
+    }
+
+    /**
+     * @dev test that onFlashloan cannot be called directly
+     */
+    function testShouldntBeAbleToCallOnFlashloanDirectly() public {
+        vm.expectRevert(BancorArbitrage.InvalidFlashLoanCaller.selector);
+        bancorArbitrage.onFlashLoan(address(bancorArbitrage), IERC20(address(bnt)), 1, 0, "0x");
+    }
+
+    /**
+     * @dev test that receiveFlashloan cannot be called directly
+     */
+    function testShouldntBeAbleToCallReceiveFlashloanDirectly() public {
+        IERC20[] memory tokens = new IERC20[](1);
+        uint256[] memory amounts = new uint256[](1);
+        uint256[] memory feeAmounts = new uint256[](1);
+        tokens[0] = IERC20(address(bnt));
+        amounts[0] = 1;
+        feeAmounts[0] = 0;
+        vm.expectRevert(BancorArbitrage.InvalidFlashLoanCaller.selector);
+        bancorArbitrage.receiveFlashLoan(tokens, amounts, feeAmounts, "0x");
+    }
+
+    /**
+     * @dev test that flashloan attempt reverts if platform id is not supported
+     */
+    function testShouldRevertIfPlatformIdIsNotSupportedForFlashloan() public {
+        BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, AMOUNT);
+        flashloans[0].platformId = uint16(PlatformId.BANCOR_V2);
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert(BancorArbitrage.InvalidFlashloanPlatformId.selector);
+        executeArbitrage(flashloans, routes, false);
+    }
+
+    /**
+     * @dev test that flashloan attempt reverts empty flashloan array is passed
+     */
+    function testShouldRevertIfEmptyFlashloanArrayIsPassed() public {
+        BancorArbitrage.Flashloan[] memory flashloans = new BancorArbitrage.Flashloan[](0);
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert(BancorArbitrage.InvalidFlashloanFormat.selector);
+        executeArbitrage(flashloans, routes, false);
+    }
+
+    /**
+     * @dev test that flashloan attempt reverts empty flashloan source tokens array is passed
+     */
+    function testShouldRevertIfEmptyFlashloanTokensArrayIsPassed() public {
+        BancorArbitrage.Flashloan[] memory flashloans = new BancorArbitrage.Flashloan[](1);
+        IERC20[] memory sourceTokens = new IERC20[](0);
+        uint256[] memory sourceAmounts = new uint256[](0);
+        flashloans[0].platformId = uint16(PlatformId.BALANCER);
+        flashloans[0].sourceTokens = sourceTokens;
+        flashloans[0].sourceAmounts = sourceAmounts;
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert(BancorArbitrage.InvalidFlashloanFormat.selector);
+        executeArbitrage(flashloans, routes, false);
+    }
+
+    /**
+     * @dev test that flashloan attempt reverts if lengths of source tokens and amounts is different
+     */
+    function testShouldRevertIfFlashloanTokensAndAmountsLengthsDiffer() public {
+        BancorArbitrage.Flashloan[] memory flashloans = new BancorArbitrage.Flashloan[](1);
+        IERC20[] memory sourceTokens = new IERC20[](1);
+        uint256[] memory sourceAmounts = new uint256[](2);
+        flashloans[0].platformId = uint16(PlatformId.BALANCER);
+        flashloans[0].sourceTokens = sourceTokens;
+        flashloans[0].sourceAmounts = sourceAmounts;
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert(BancorArbitrage.InvalidFlashloanFormat.selector);
+        executeArbitrage(flashloans, routes, false);
+    }
+
+    /**
+     * @dev test that flashloan attempt reverts if bancor v3 has more than one source token
+     */
+    function testShouldRevertIfBancorV3FlashloanHasMoreThanOneSourceToken() public {
+        BancorArbitrage.Flashloan[] memory flashloans = new BancorArbitrage.Flashloan[](1);
+        IERC20[] memory sourceTokens = new IERC20[](2);
+        uint256[] memory sourceAmounts = new uint256[](2);
+        flashloans[0].platformId = uint16(PlatformId.BANCOR_V3);
+        flashloans[0].sourceTokens = sourceTokens;
+        flashloans[0].sourceAmounts = sourceAmounts;
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert(BancorArbitrage.InvalidFlashloanFormat.selector);
+        executeArbitrage(flashloans, routes, false);
+    }
+
+    /**
+     * @dev test that flashloan attempt reverts if any of the flashloan source amounts are zero
+     */
+    function testShouldRevertIfAnyOfTheFlashloanSourceAmountsAreZero() public {
+        BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, AMOUNT);
+        flashloans[0].sourceAmounts[0] = 0;
+        BancorArbitrage.RouteV2[] memory routes = getRoutes();
+        vm.expectRevert(ZeroValue.selector);
+        executeArbitrage(flashloans, routes, false);
     }
 
     /**
