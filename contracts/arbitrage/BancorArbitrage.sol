@@ -36,7 +36,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     error InvalidFlashloanPlatformId();
     error InvalidRouteLength();
     error InvalidInitialAndFinalTokens();
-    error InvalidFlashloanStructure();
+    error InvalidFlashloanFormat();
     error InvalidFlashLoanCaller();
     error MinTargetAmountTooHigh();
     error InvalidSourceToken();
@@ -398,21 +398,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             revert InvalidFlashLoanCaller();
         }
 
-        // decode the arb data
-        (uint256 currentIndex, Flashloan[] memory flashloans, RouteV2[] memory routes) = abi.decode(
-            data,
-            (uint256, Flashloan[], RouteV2[])
-        );
-        // if we're at the final flashloan index, perform the arbitrage
-        if (currentIndex == flashloans.length) {
-            _arbitrageV2(routes);
-        } else {
-            // else execute the next flashloan in the sequence
-            // update the currentIndex in the encoded data
-            _incrementIndex(data, currentIndex);
-            // take flashloan
-            _takeFlashloan(flashloans[currentIndex], data);
-        }
+        // execute the next flashloan or the arbitrage
+        _decodeAndActOnFlashloanData(data);
 
         // return the flashloan
         Token(address(erc20Token)).safeTransfer(msg.sender, amount + feeAmount);
@@ -431,21 +418,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             revert InvalidFlashLoanCaller();
         }
 
-        // decode the arb data
-        (uint256 currentIndex, Flashloan[] memory flashloans, RouteV2[] memory routes) = abi.decode(
-            userData,
-            (uint256, Flashloan[], RouteV2[])
-        );
-        // if we're at the final flashloan index, perform the arbitrage
-        if (currentIndex == flashloans.length) {
-            _arbitrageV2(routes);
-        } else {
-            // else execute the next flashloan in the sequence
-            // update the currentIndex in the encoded data
-            _incrementIndex(userData, currentIndex);
-            // take flashloan
-            _takeFlashloan(flashloans[currentIndex], userData);
-        }
+        // execute the next flashloan or the arbitrage
+        _decodeAndActOnFlashloanData(userData);
 
         // return the flashloans
         for (uint256 i = 0; i < tokens.length; i = uncheckedInc(i)) {
@@ -514,6 +488,24 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             if (value > 0) {
                 revert InvalidETHAmountSent();
             }
+        }
+    }
+
+    function _decodeAndActOnFlashloanData(bytes memory data) private {
+        // decode the arb data
+        (uint256 currentIndex, Flashloan[] memory flashloans, RouteV2[] memory routes) = abi.decode(
+            data,
+            (uint256, Flashloan[], RouteV2[])
+        );
+        // if we're at the final flashloan index, perform the arbitrage
+        if (currentIndex == flashloans.length) {
+            _arbitrageV2(routes);
+        } else {
+            // else execute the next flashloan in the sequence
+            // update the currentIndex in the encoded data
+            _incrementIndex(data, currentIndex);
+            // take flashloan
+            _takeFlashloan(flashloans[currentIndex], data);
         }
     }
 
@@ -879,18 +871,18 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     modifier validateFlashloans(Flashloan[] memory flashloans) {
         if (flashloans.length == 0) {
-            revert InvalidFlashloanStructure();
+            revert InvalidFlashloanFormat();
         }
         for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
             Flashloan memory flashloan = flashloans[i];
             if (flashloan.sourceTokens.length == 0) {
-                revert InvalidFlashloanStructure();
+                revert InvalidFlashloanFormat();
             }
             if (flashloan.sourceTokens.length != flashloan.sourceAmounts.length) {
-                revert InvalidFlashloanStructure();
+                revert InvalidFlashloanFormat();
             }
             if (flashloan.platformId == PLATFORM_ID_BANCOR_V3 && flashloan.sourceTokens.length > 1) {
-                revert InvalidFlashloanStructure();
+                revert InvalidFlashloanFormat();
             }
             // check source amounts are not zero in value
             uint256[] memory sourceAmounts = flashloan.sourceAmounts;
