@@ -347,7 +347,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         TradeRoute[] memory routes
     ) public nonReentrant validRouteLength(routes.length) validateFlashloans(flashloans) {
         // abi encode the data to be passed in to the flashloan platform
-        bytes memory encodedData = abi.encode(uint256(1), flashloans, routes);
+        bytes memory encodedData = _encodeFlashloanData(flashloans, routes);
         // take flashloan
         _takeFlashloan(flashloans[0], encodedData);
 
@@ -491,21 +491,36 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         }
     }
 
+    /**
+     * @dev encode the flashloan and route data
+     */
+    function _encodeFlashloanData(
+        Flashloan[] memory flashloans,
+        TradeRoute[] memory routes
+    ) private pure returns (bytes memory encodedData) {
+        Flashloan[] memory remainingFlashloans = new Flashloan[](flashloans.length - 1);
+        for (uint256 i = 0; i < remainingFlashloans.length; ++i) {
+            remainingFlashloans[i] = flashloans[i + 1];
+        }
+        // abi encode the data to be passed in to the flashloan platform
+        encodedData = abi.encode(remainingFlashloans, routes);
+    }
+
+    /**
+     * @dev decode the flashloan data and either execute the next flashloan or the arbitrage
+     */
     function _decodeAndActOnFlashloanData(bytes memory data) private {
         // decode the arb data
-        (uint256 currentIndex, Flashloan[] memory flashloans, TradeRoute[] memory routes) = abi.decode(
-            data,
-            (uint256, Flashloan[], TradeRoute[])
-        );
-        // if we're at the final flashloan index, perform the arbitrage
-        if (currentIndex == flashloans.length) {
+        (Flashloan[] memory flashloans, TradeRoute[] memory routes) = abi.decode(data, (Flashloan[], TradeRoute[]));
+        // if the flashloan array is empty, perform the arbitrage
+        if (flashloans.length == 0) {
             _arbitrageV2(routes);
         } else {
             // else execute the next flashloan in the sequence
-            // update the currentIndex in the encoded data
-            _incrementIndex(data, currentIndex);
+            // abi encode the data to be passed in to the flashloan platform
+            data = _encodeFlashloanData(flashloans, routes);
             // take flashloan
-            _takeFlashloan(flashloans[currentIndex], data);
+            _takeFlashloan(flashloans[0], data);
         }
     }
 
@@ -846,17 +861,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             // increase allowance to the max amount if allowance < inputAmount
             token.safeIncreaseAllowance(platform, type(uint256).max - allowance);
         }
-    }
-
-    /**
-     * @dev increment the abi-encoded flashloan and route data's index
-     */
-    function _incrementIndex(bytes memory data, uint256 index) private pure {
-        /* solhint-disable no-inline-assembly */
-        assembly {
-            mstore(add(data, 32), add(index, 1))
-        }
-        /* solhint-enable no-inline-assembly */
     }
 
     function uncheckedInc(uint256 i) private pure returns (uint256 j) {

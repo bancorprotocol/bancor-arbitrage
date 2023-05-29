@@ -1254,24 +1254,6 @@ contract BancorArbitrageV2ArbsTest is Test {
         bancorArbitrage.flashloanAndArbV2(flashloans, routes);
     }
 
-    /// --- Other tests --- ///
-
-    /**
-     * @dev test that the incrementIndex function increments the abi-encoded index
-     */
-    function testShouldIncrementIndex() public {
-        BancorArbitrage.Flashloan[] memory flashloans = getSingleTokenFlashloanDataForV3(bnt, AMOUNT);
-        BancorArbitrage.TradeRoute[] memory routes = getRoutes();
-        uint indexBefore = 1;
-        // abi encode the data to be passed in to the flashloan platform
-        bytes memory encodedData = abi.encode(indexBefore, flashloans, routes);
-        // update index
-        incrementIndex(encodedData, indexBefore);
-        // decode data with updated index
-        uint256 indexAfter = abi.decode(encodedData, (uint256));
-        assertEq(indexAfter, indexBefore + 1);
-    }
-
     /**
      * @dev get 3 routes for arb testing
      */
@@ -1813,16 +1795,5 @@ contract BancorArbitrageV2ArbsTest is Test {
     function modifyRouteTargetToken(BancorArbitrage.TradeRoute memory route, address token) public pure {
         route.targetToken = Token(token);
         route.customAddress = token;
-    }
-
-    /**
-     * @dev increment the abi-encoded flashloan and route data's index
-     */
-    function incrementIndex(bytes memory data, uint index) private pure {
-        /* solhint-disable no-inline-assembly */
-        assembly {
-            mstore(add(data, 32), add(index, 1))
-        }
-        /* solhint-enable no-inline-assembly */
     }
 }
