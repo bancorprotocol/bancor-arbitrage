@@ -499,8 +499,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         TradeRoute[] memory routes
     ) private pure returns (bytes memory encodedData) {
         Flashloan[] memory remainingFlashloans = new Flashloan[](flashloans.length - 1);
-        for (uint256 i = 0; i < remainingFlashloans.length; ++i) {
-            remainingFlashloans[i] = flashloans[i + 1];
+        for (uint256 i = 0; i < remainingFlashloans.length; i = uncheckedInc(i)) {
+            remainingFlashloans[i] = flashloans[uncheckedInc(i)];
         }
         // abi encode the data to be passed in to the flashloan platform
         encodedData = abi.encode(remainingFlashloans, routes);
