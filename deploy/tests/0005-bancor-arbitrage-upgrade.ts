@@ -24,7 +24,7 @@ describeDeployment(__filename, () => {
 
         const arbRewards = await bancorArbitrage.rewards();
         expect(arbRewards.percentagePPM).to.equal(toPPM(50));
-        expect(arbRewards.maxAmount.toString()).to.equal(toWei(100).toString());
+        expect(arbRewards.maxAmount.toString()).to.equal(toWei(1000).toString());
 
         // test implementation has been initialized
         await expect(bancorArbitrageImplementation.initialize()).to.be.rejectedWith('execution reverted');
