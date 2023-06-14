@@ -132,14 +132,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     // Balancer Vault
     IBalancerVault internal immutable _balancerVault;
 
-    // Dust wallet address
-    address internal immutable _dustWallet;
+    // Protocol wallet address
+    address internal immutable _protocolWallet;
 
     // rewards defaults
     Rewards internal _rewards;
-
-    // min BNT burn for an arbitrage
-    uint256 private _minBurn;
 
     // upgrade forward-compatibility storage gap
     uint256[MAX_GAP - 3] private __gap;
@@ -153,8 +150,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         address[] tokenPath,
         address[] sourceTokens,
         uint256[] sourceAmounts,
-        uint256 burnAmount,
-        uint256 rewardAmount
+        uint256[] protocolAmounts,
+        uint256[] rewardAmounts
     );
 
     /**
@@ -177,11 +174,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     constructor(
         IERC20 initBnt,
-        address initDustWallet,
+        address initProtocolWallet,
         Platforms memory platforms
     )
         validAddress(address(initBnt))
-        validAddress(address(initDustWallet))
+        validAddress(address(initProtocolWallet))
         validAddress(address(platforms.bancorNetworkV2))
         validAddress(address(platforms.bancorNetworkV3))
         validAddress(address(platforms.uniV2Router))
@@ -192,7 +189,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     {
         _bnt = initBnt;
         _weth = IERC20(platforms.uniV2Router.WETH());
-        _dustWallet = initDustWallet;
+        _protocolWallet = initProtocolWallet;
         _bancorNetworkV2 = platforms.bancorNetworkV2;
         _bancorNetworkV3 = platforms.bancorNetworkV3;
         _uniswapV2Router = platforms.uniV2Router;
@@ -288,33 +285,10 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev set min bnt burn amount
-     *
-     * requirements:
-     *
-     * - the caller must be the admin of the contract
-     */
-    function setMinBurn(uint256 newMinBurn) external onlyAdmin {
-        uint256 currentMinBurn = _minBurn;
-        if (currentMinBurn == newMinBurn) {
-            return;
-        }
-        _minBurn = newMinBurn;
-        emit MinBurnUpdated(currentMinBurn, newMinBurn);
-    }
-
-    /**
      * @dev returns the rewards settings
      */
     function rewards() external view returns (Rewards memory) {
         return _rewards;
-    }
-
-    /**
-     * @dev returns the min bnt burn amount
-     */
-    function minBurn() external view returns (uint256) {
-        return _minBurn;
     }
 
     /**
@@ -350,32 +324,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         bytes memory encodedData = _encodeFlashloanData(flashloans, routes);
         // take flashloan
         _takeFlashloan(flashloans[0], encodedData);
-
-        // trade leftover tokens for BNT on Bancor Network V3
-        for (uint256 i = 0; i < flashloans.length; i = uncheckedInc(i)) {
-            IERC20[] memory tokens = flashloans[i].sourceTokens;
-            for (uint256 j = 0; j < tokens.length; j = uncheckedInc(j)) {
-                Token token = Token(address(tokens[j]));
-                // check token is not BNT and is tradeable on bancor v3
-                if (!token.isEqual(_bnt) && _bancorNetworkV3.collectionByPool(token) != address(0)) {
-                    uint256 leftover = token.balanceOf(address(this));
-                    // check we have > 0 balance
-                    if (leftover > 0) {
-                        _trade(
-                            PLATFORM_ID_BANCOR_V3,
-                            token,
-                            Token(address(_bnt)),
-                            leftover,
-                            1,
-                            block.timestamp,
-                            address(0),
-                            0,
-                            ""
-                        );
-                    }
-                }
-            }
-        }
 
         // allocate the rewards
         (address[] memory sourceTokens, uint256[] memory sourceAmounts) = _extractTokensAndAmounts(flashloans);
@@ -447,12 +395,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
         // return the tokens to the user
         token.safeTransfer(msg.sender, sourceAmount);
-
-        // if initial token is not BNT, trade leftover tokens for BNT on Bancor Network V3
-        if (!token.isEqual(_bnt)) {
-            uint256 leftover = token.balanceOf(address(this));
-            _trade(PLATFORM_ID_BANCOR_V3, token, Token(address(_bnt)), leftover, 1, block.timestamp, address(0), 0, "");
-        }
 
         // allocate the rewards
         address[] memory sourceTokens = new address[](1);
@@ -722,8 +664,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
 
             uint256 remainingSourceTokens = sourceToken.balanceOf(address(this));
             if (remainingSourceTokens > 0) {
-                // transfer any remaining source tokens to a dust wallet
-                sourceToken.safeTransfer(_dustWallet, remainingSourceTokens);
+                // transfer any remaining source tokens to the protocol wallet
+                sourceToken.safeTransfer(_protocolWallet, remainingSourceTokens);
             }
 
             return;
@@ -733,7 +675,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     }
 
     /**
-     * @dev allocates the rewards to the caller and burns the rest
+     * @dev allocates the rewards to the caller and sends the rest to the protocol wallet
      */
     function _allocateRewards(
         address[] memory sourceTokens,
@@ -741,37 +683,36 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         TradeRoute[] memory routes,
         address caller
     ) internal {
-        // get the total amount
-        uint256 totalAmount = _bnt.balanceOf(address(this));
-
-        // calculate the rewards to send to the caller
-        uint256 rewardAmount = MathEx.mulDivF(totalAmount, _rewards.percentagePPM, PPM_RESOLUTION);
-
-        // limit the rewards by the defined limit
-        if (rewardAmount > _rewards.maxAmount) {
-            rewardAmount = _rewards.maxAmount;
-        }
-
-        // calculate the burn amount
-        uint256 burnAmount = totalAmount - rewardAmount;
-
-        // check if min bnt burn amount is hit
-        if (burnAmount < _minBurn) {
-            revert InsufficientBurn();
-        }
-
-        // burn the tokens
-        if (burnAmount > 0) {
-            _bnt.safeTransfer(address(_bnt), burnAmount);
-        }
-
-        // transfer the rewards to the caller
-        if (rewardAmount > 0) {
-            _bnt.safeTransfer(caller, rewardAmount);
+        uint256 tokenLength = sourceTokens.length;
+        uint256[] memory protocolAmounts = new uint256[](tokenLength);
+        uint256[] memory rewardAmounts = new uint256[](tokenLength);
+        // transfer each of the remaining token balances to the caller and protocol wallet
+        for (uint256 i = 0; i < tokenLength; i = uncheckedInc(i)) {
+            Token sourceToken = Token(sourceTokens[i]);
+            uint256 balance = sourceToken.balanceOf(address(this));
+            uint256 rewardAmount = MathEx.mulDivF(balance, _rewards.percentagePPM, PPM_RESOLUTION);
+            uint256 protocolAmount = balance - rewardAmount;
+            // handle protocol amount
+            if (protocolAmount > 0) {
+                if (sourceToken.isEqual(_bnt)) {
+                    // if token is bnt burn it directly
+                    sourceToken.safeTransfer(address(_bnt), protocolAmount);
+                } else {
+                    // else transfer to protocol wallet
+                    sourceToken.safeTransfer(_protocolWallet, protocolAmount);
+                }
+            }
+            // handle reward amount
+            if (rewardAmount > 0) {
+                sourceToken.safeTransfer(caller, rewardAmount);
+            }
+            // set current reward and protocol amounts for the event
+            rewardAmounts[i] = rewardAmount;
+            protocolAmounts[i] = protocolAmount;
         }
 
         (uint16[] memory platformIds, address[] memory path) = _buildArbPath(routes);
-        emit ArbitrageExecuted(caller, platformIds, path, sourceTokens, sourceAmounts, burnAmount, rewardAmount);
+        emit ArbitrageExecuted(caller, platformIds, path, sourceTokens, sourceAmounts, protocolAmounts, rewardAmounts);
     }
 
     /**
