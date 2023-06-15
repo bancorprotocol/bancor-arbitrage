@@ -696,6 +696,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             if (protocolAmount > 0) {
                 if (sourceToken.isEqual(_bnt)) {
                     // if token is bnt burn it directly
+                    // transferring bnt to the token's address triggers a burn
                     sourceToken.safeTransfer(address(_bnt), protocolAmount);
                 } else {
                     // else transfer to protocol wallet
