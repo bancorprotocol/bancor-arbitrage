@@ -691,7 +691,11 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             Token sourceToken = Token(sourceTokens[i]);
             uint256 balance = sourceToken.balanceOf(address(this));
             uint256 rewardAmount = MathEx.mulDivF(balance, _rewards.percentagePPM, PPM_RESOLUTION);
-            uint256 protocolAmount = balance - rewardAmount;
+            uint256 protocolAmount;
+            // safe because _rewards.percentagePPM <= PPM_RESOLUTION
+            unchecked {
+                protocolAmount = balance - rewardAmount;
+            }
             // handle protocol amount
             if (protocolAmount > 0) {
                 if (sourceToken.isEqual(_bnt)) {
