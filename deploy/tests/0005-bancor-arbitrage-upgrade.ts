@@ -1,3 +1,4 @@
+import { shouldHaveGap } from '../../utils/Proxy';
 import { BancorArbitrage, ProxyAdmin } from '../../components/Contracts';
 import { DeployedContracts, describeDeployment } from '../../utils/Deploy';
 import { toPPM, toWei } from '../../utils/Types';
@@ -7,6 +8,8 @@ import { ethers } from 'hardhat';
 describeDeployment(__filename, () => {
     let proxyAdmin: ProxyAdmin;
     let bancorArbitrage: BancorArbitrage;
+
+    shouldHaveGap('BancorArbitrage', '_rewards');
 
     beforeEach(async () => {
         proxyAdmin = await DeployedContracts.ProxyAdmin.deployed();
