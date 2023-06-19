@@ -20,7 +20,7 @@ const TestNamedAccounts = {
         ...mainnet('0xc6bed363b30DF7F35b601a5547fE56cd31Ec63DA')
     },
     bntWhale: {
-        ...mainnet('0xA744a64Dfd51e4feE3360f1EC1509D329047d7db')
+        ...mainnet('0x221A0e3C9AcEa6B3f1CC9DfC7063509c89bE7BC3')
     },
     usdcWhale: {
         ...mainnet('0x55FE002aefF02F77364de339a1292923A15844B8')
@@ -62,6 +62,10 @@ const SushiSwapNamedAccounts = {
     sushiSwapFactory: { ...mainnet('0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac') }
 };
 
+const BalancerNamedAccounts = {
+    balancerVault: { ...mainnet('0xBA12222222228d8Ba445958a75a0704d566BF2C8') }
+};
+
 const BancorNamedAccounts = {
     bancorNetworkV2: { ...mainnet('0x2F9EC37d6CcFFf1caB21733BdaDEdE11c823cCB0') },
     bancorNetworkV3: { ...mainnet('0xeEF417e1D5CC832e619ae18D2F140De2999dD4fB') },
@@ -84,5 +88,6 @@ export const NamedAccounts = {
     ...TestNamedAccounts,
     ...UniswapNamedAccounts,
     ...SushiSwapNamedAccounts,
+    ...BalancerNamedAccounts,
     ...BancorNamedAccounts
 };
