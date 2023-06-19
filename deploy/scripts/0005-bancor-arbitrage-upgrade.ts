@@ -10,7 +10,7 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
         uniswapV3Router,
         sushiSwapRouter,
         bnt,
-        dustWallet,
+        protocolWallet,
         bancorNetworkV2,
         bancorNetworkV3,
         carbonController
@@ -30,7 +30,7 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
             {
                 name: InstanceName.BancorArbitrage,
                 from: deployer,
-                args: [bnt, dustWallet, exchanges]
+                args: [bnt, protocolWallet, exchanges]
             },
             true
         );
@@ -43,7 +43,7 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
                 from: deployer,
                 args: [
                     bnt,
-                    dustWallet,
+                    protocolWallet,
                     {
                         bancorNetworkV2: mockExchanges.address,
                         bancorNetworkV3,

@@ -10,6 +10,8 @@ import { Token } from "../token/Token.sol";
 import { TokenLibrary } from "../token/TokenLibrary.sol";
 import { BancorArbitrage } from "../arbitrage/BancorArbitrage.sol";
 import { IFlashLoanRecipient } from "../exchanges/interfaces/IBancorNetwork.sol";
+import { IFlashLoanRecipient as BalancerFlashloanRecipient } from "../exchanges/interfaces/IBalancerVault.sol";
+
 import { TradeAction } from "../exchanges/interfaces/ICarbonController.sol";
 
 contract MockExchanges {
@@ -76,6 +78,7 @@ contract MockExchanges {
         }
         uint feeAmount = 0;
         uint prevBalance = token.balanceOf(address(this));
+        uint prevWethBalance = _weth.balanceOf(address(this));
 
         // transfer funds to flashloan recipient
         token.safeTransfer(payable(address(recipient)), amount);
@@ -85,7 +88,10 @@ contract MockExchanges {
 
         // account for net gain in the token which is sent from this contract
         // decode data to count the swaps
-        BancorArbitrage.RouteV2[] memory routes = abi.decode(data, (BancorArbitrage.RouteV2[]));
+        (, BancorArbitrage.TradeRoute[] memory routes) = abi.decode(
+            data,
+            (BancorArbitrage.Flashloan[], BancorArbitrage.TradeRoute[])
+        );
         uint swapCount = address(token) == _bnt ? routes.length : routes.length + 1;
         uint gain = swapCount * _outputAmount;
         uint expectedBalance;
@@ -93,6 +99,12 @@ contract MockExchanges {
             expectedBalance = prevBalance - gain;
         } else {
             expectedBalance = prevBalance + gain;
+        }
+        // account for weth gains if token is native (uni v3 swaps convert eth to weth)
+        if (token.isNative()) {
+            uint wethBalance = _weth.balanceOf(address(this));
+            uint wethGain = wethBalance - prevWethBalance;
+            expectedBalance -= wethGain;
         }
 
         if (token.balanceOf(address(this)) < expectedBalance) {

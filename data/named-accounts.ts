@@ -78,7 +78,7 @@ export const NamedAccounts = {
     foundationMultisig2: { ...mainnet('0x0c333d48Af19c2b42577f3C8f4779F0347F8C819') },
     daoMultisig: { ...mainnet('0x7e3692a6d8c34a762079fa9057aed87be7e67cb8') },
     daoPauserMultisig: { ...mainnet('0xc140c1CD2e587fC04DAa780d49b616F768476660') },
-    dustWallet: { ...mainnet('0xeBcC959479634EEC5A4d7162e36f8B8cc763f491') },
+    protocolWallet: { ...mainnet('0xba7d1581Db6248DC9177466a328BF457703c8f84') },
 
     ...TokenNamedAccounts,
     ...TestNamedAccounts,
