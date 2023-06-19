@@ -100,11 +100,6 @@ contract BancorArbitrageTest is Test {
     );
 
     /**
-     * @dev triggered when the min bnt burn amount is updated
-     */
-    event MinBurnUpdated(uint256 prevAmount, uint256 newAmount);
-
-    /**
      * @dev triggered when a flash-loan is completed
      */
     event FlashLoanCompleted(Token indexed token, address indexed borrower, uint256 amount, uint256 feeAmount);

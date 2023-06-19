@@ -138,6 +138,9 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
     // rewards defaults
     Rewards internal _rewards;
 
+    // deprecated variable
+    uint256 private deprecated;
+
     // upgrade forward-compatibility storage gap
     uint256[MAX_GAP - 3] private __gap;
 
@@ -163,11 +166,6 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         uint256 prevMaxAmount,
         uint256 newMaxAmount
     );
-
-    /**
-     * @dev triggered when the min bnt burn amount is updated
-     */
-    event MinBurnUpdated(uint256 prevAmount, uint256 newAmount);
 
     /**
      * @dev a "virtual" constructor that is only used to set immutable state variables
@@ -289,6 +287,14 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      */
     function rewards() external view returns (Rewards memory) {
         return _rewards;
+    }
+
+    /**
+     * @dev returns the min bnt burn amount
+     * note: deprecated
+     */
+    function minBurn() external pure returns (uint256) {
+        return 0;
     }
 
     /**
