@@ -13,16 +13,18 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
         protocolWallet,
         bancorNetworkV2,
         bancorNetworkV3,
-        carbonController
+        carbonController,
+        balancerVault
     } = await getNamedAccounts();
 
-    const exchanges: BancorArbitrage.ExchangesStruct = {
+    const platforms: BancorArbitrage.PlatformsStruct = {
         bancorNetworkV2,
         bancorNetworkV3,
         uniV2Router: uniswapV2Router02,
         uniV3Router: uniswapV3Router,
         sushiswapRouter: sushiSwapRouter,
-        carbonController
+        carbonController,
+        balancerVault
     };
 
     if (isMainnet()) {
@@ -30,12 +32,13 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
             {
                 name: InstanceName.BancorArbitrage,
                 from: deployer,
-                args: [bnt, protocolWallet, exchanges]
+                args: [bnt, protocolWallet, platforms]
             },
             true
         );
     } else {
         const mockExchanges = await DeployedContracts.MockExchanges.deployed();
+        const mockBalancerVault = await DeployedContracts.MockBalancerVault.deployed();
 
         await upgradeProxy(
             {
@@ -50,7 +53,8 @@ const func: DeployFunction = async ({ getNamedAccounts }: HardhatRuntimeEnvironm
                         uniV2Router: mockExchanges.address,
                         uniV3Router: mockExchanges.address,
                         sushiswapRouter: mockExchanges.address,
-                        carbonController: mockExchanges.address
+                        carbonController: mockExchanges.address,
+                        balancerVault: mockBalancerVault.address
                     }
                 ]
             },
