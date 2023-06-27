@@ -259,7 +259,7 @@ contract BancorArbitrageTest is Test {
 
     function testShouldBeInitialized() public {
         uint version = bancorArbitrage.version();
-        assertEq(version, 4);
+        assertEq(version, 5);
     }
 
     /// --- Reward tests --- ///

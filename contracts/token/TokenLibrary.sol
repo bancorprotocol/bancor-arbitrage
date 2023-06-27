@@ -5,6 +5,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IERC20Permit } from "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
 import { SafeERC20Ex } from "./SafeERC20Ex.sol";
 
@@ -16,6 +17,7 @@ import { Token } from "./Token.sol";
 library TokenLibrary {
     using SafeERC20 for IERC20;
     using SafeERC20Ex for IERC20;
+    using Address for address payable;
 
     error PermitUnsupported();
 
@@ -69,6 +71,22 @@ library TokenLibrary {
         }
 
         return toIERC20(token).balanceOf(account);
+    }
+
+    /**
+     * @dev transfers a specific amount of the native token/ERC20 token
+     * @dev forwards all available gas if sending native token
+     */
+    function unsafeTransfer(Token token, address to, uint256 amount) internal {
+        if (amount == 0) {
+            return;
+        }
+
+        if (isNative(token)) {
+            payable(to).sendValue(amount);
+        } else {
+            toIERC20(token).safeTransfer(to, amount);
+        }
     }
 
     /**
