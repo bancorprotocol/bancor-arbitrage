@@ -232,7 +232,7 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
      * @inheritdoc Upgradeable
      */
     function version() public pure override(Upgradeable) returns (uint16) {
-        return 4;
+        return 5;
     }
 
     /**
@@ -400,7 +400,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
         _arbitrageV2(routes);
 
         // return the tokens to the user
-        token.safeTransfer(msg.sender, sourceAmount);
+        // safe due to nonReentrant modifier (forwards all available gas in case of ETH)
+        token.unsafeTransfer(msg.sender, sourceAmount);
 
         // allocate the rewards
         address[] memory sourceTokens = new address[](1);
@@ -671,7 +672,8 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
             uint256 remainingSourceTokens = sourceToken.balanceOf(address(this));
             if (remainingSourceTokens > 0) {
                 // transfer any remaining source tokens to the protocol wallet
-                sourceToken.safeTransfer(_protocolWallet, remainingSourceTokens);
+                // safe due to nonReentrant modifier (forwards all available gas in case of ETH)
+                sourceToken.unsafeTransfer(_protocolWallet, remainingSourceTokens);
             }
 
             return;
@@ -710,12 +712,14 @@ contract BancorArbitrage is ReentrancyGuardUpgradeable, Utils, Upgradeable {
                     sourceToken.safeTransfer(address(_bnt), protocolAmount);
                 } else {
                     // else transfer to protocol wallet
-                    sourceToken.safeTransfer(_protocolWallet, protocolAmount);
+                    // safe due to nonReentrant modifier (forwards all available gas in case of ETH)
+                    sourceToken.unsafeTransfer(_protocolWallet, protocolAmount);
                 }
             }
             // handle reward amount
             if (rewardAmount > 0) {
-                sourceToken.safeTransfer(caller, rewardAmount);
+                // safe due to nonReentrant modifier (forwards all available gas in case of ETH)
+                sourceToken.unsafeTransfer(caller, rewardAmount);
             }
             // set current reward and protocol amounts for the event
             rewardAmounts[i] = rewardAmount;
